@@ -28,7 +28,10 @@
 		A7F7F2A3A4F685C150F3A4EB /* MurkApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF0769FBCC587E943F745F39 /* MurkApp.swift */; };
 		ACC4D82084C49A5396A59829 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9733FDAC02D548167EEC4EC /* RootView.swift */; };
 		B4703A41C2F850F0C4EA4107 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 68640EE2DC3A532D4D82ED0D /* Assets.xcassets */; };
+		CC71018D8A6502A1233B00D8 /* SceneSnapshotter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15D4895C37896C6B948986E7 /* SceneSnapshotter.swift */; };
+		D087864F090F5044C62E60A4 /* WidgetArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC4A343F50D536DBF8D010FB /* WidgetArt.swift */; };
 		EACC29BB0870B6F2AAC72C6A /* WeatherService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 980C27112EE7F158B391CDA8 /* WeatherService.swift */; };
+		EF4C66CCF94A12B846021B74 /* WidgetArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC4A343F50D536DBF8D010FB /* WidgetArt.swift */; };
 		FAF8C8AD6937312F4827D599 /* SettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F64494320C87BA029FE78481 /* SettingsSheet.swift */; };
 		FD9BA128199888B7B085A758 /* MoonDisc.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC98E6885498BD8940A8EE6 /* MoonDisc.swift */; };
 /* End PBXBuildFile section */
@@ -59,6 +62,7 @@
 
 /* Begin PBXFileReference section */
 		08332E026CEBE5227FF3C287 /* Skin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Skin.swift; sourceTree = "<group>"; };
+		15D4895C37896C6B948986E7 /* SceneSnapshotter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneSnapshotter.swift; sourceTree = "<group>"; };
 		1DB95DEE244E1777F4C71E4E /* Weather.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Weather.swift; sourceTree = "<group>"; };
 		37776B5F8B8D85C29B293A50 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		3C923C29944FBE897C5A0ADE /* NowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowView.swift; sourceTree = "<group>"; };
@@ -75,6 +79,7 @@
 		A9733FDAC02D548167EEC4EC /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		BFC98E6885498BD8940A8EE6 /* MoonDisc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoonDisc.swift; sourceTree = "<group>"; };
 		D7E9591A5E572E0A398B3708 /* Astronomy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Astronomy.swift; sourceTree = "<group>"; };
+		EC4A343F50D536DBF8D010FB /* WidgetArt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetArt.swift; sourceTree = "<group>"; };
 		EF0ECAE5C6D2EB8C223FC878 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		EFC6315B8B0E64D94ED4DFE3 /* Murk.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Murk.entitlements; sourceTree = "<group>"; };
 		F5F6828DFD811F9D61B6A454 /* DetailPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetailPages.swift; sourceTree = "<group>"; };
@@ -153,6 +158,7 @@
 		ACDCA5019099D8861E3B7ADE /* Scene */ = {
 			isa = PBXGroup;
 			children = (
+				15D4895C37896C6B948986E7 /* SceneSnapshotter.swift */,
 				5FCBDFF6266A50E6B93009C3 /* WeatherSceneView.swift */,
 			);
 			path = Scene;
@@ -163,6 +169,7 @@
 			children = (
 				BFC98E6885498BD8940A8EE6 /* MoonDisc.swift */,
 				97F873A692D82024E2276BA0 /* SharedStore.swift */,
+				EC4A343F50D536DBF8D010FB /* WidgetArt.swift */,
 			);
 			path = Shared;
 			sourceTree = "<group>";
@@ -241,9 +248,11 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					45B0C481FE98F4FB600DF6C4 = {
+						DevelopmentTeam = PJVDGVTL4J;
 						ProvisioningStyle = Automatic;
 					};
 					71BF09CE818C455764734577 = {
+						DevelopmentTeam = PJVDGVTL4J;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -291,6 +300,7 @@
 				69CCC6DE8E9A5B92EA2D21B4 /* Skin.swift in Sources */,
 				043B4ED92227EE43794ADE93 /* Weather.swift in Sources */,
 				EACC29BB0870B6F2AAC72C6A /* WeatherService.swift in Sources */,
+				D087864F090F5044C62E60A4 /* WidgetArt.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -307,12 +317,14 @@
 				A7F7F2A3A4F685C150F3A4EB /* MurkApp.swift in Sources */,
 				19236CE063FF25C28B8D5983 /* NowView.swift in Sources */,
 				ACC4D82084C49A5396A59829 /* RootView.swift in Sources */,
+				CC71018D8A6502A1233B00D8 /* SceneSnapshotter.swift in Sources */,
 				FAF8C8AD6937312F4827D599 /* SettingsSheet.swift in Sources */,
 				67DA0A0CCB6F9D0777A2B6B3 /* SharedStore.swift in Sources */,
 				8B3B7BD989DD3B40EB41A529 /* Skin.swift in Sources */,
 				228DA7EEE444C3347B758AE0 /* Weather.swift in Sources */,
 				A61530D279E1319A4132AF32 /* WeatherSceneView.swift in Sources */,
 				55AE05BE975489CD3BE4B699 /* WeatherService.swift in Sources */,
+				EF4C66CCF94A12B846021B74 /* WidgetArt.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -364,6 +376,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = PJVDGVTL4J;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
@@ -454,6 +467,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 1;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = PJVDGVTL4J;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
