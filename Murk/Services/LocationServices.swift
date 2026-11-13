@@ -25,9 +25,22 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         return s == .denied || s == .restricted
     }
 
+    private var inFlight: Task<Place, Error>?
+
+    /// Concurrent callers share one request, so a second call never strands the first.
     func currentPlace() async throws -> Place {
+        if let t = inFlight { return try await t.value }
+        let t = Task { @MainActor in try await self.fetchPlace() }
+        inFlight = t
+        defer { inFlight = nil }
+        return try await t.value
+    }
+
+    @MainActor
+    private func fetchPlace() async throws -> Place {
         if manager.authorizationStatus == .notDetermined {
             await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
+                if let old = authContinuation { old.resume() }
                 authContinuation = c
                 manager.requestWhenInUseAuthorization()
             }
@@ -35,10 +48,15 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         let status = manager.authorizationStatus
         guard status == .authorizedWhenInUse || status == .authorizedAlways else { throw LocationError.denied }
 
-        let location: CLLocation = try await withCheckedThrowingContinuation { c in
-            locationContinuation?.resume(throwing: CancellationError())
-            locationContinuation = c
-            manager.requestLocation()
+        let location: CLLocation
+        if let recent = manager.location, recent.timestamp.timeIntervalSinceNow > -600 {
+            location = recent
+        } else {
+            location = try await withCheckedThrowingContinuation { c in
+                locationContinuation?.resume(throwing: CancellationError())
+                locationContinuation = c
+                manager.requestLocation()
+            }
         }
         var name = "My Location"
         if let mark = try? await CLGeocoder().reverseGeocodeLocation(location).first {

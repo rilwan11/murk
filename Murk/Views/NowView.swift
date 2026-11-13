@@ -103,7 +103,8 @@ struct NowView: View {
     private var footer: some View {
         Group {
             if let err = state.errorMessage {
-                Text(err).foregroundStyle(state.skin.sun)
+                Button { state.retry() } label: { Text(err.uppercased()) }
+                    .foregroundStyle(state.skin.sun)
             } else if let f = state.forecast {
                 let day = selectedDay < f.daily.count ? f.daily[selectedDay] : nil
                 if selectedDay > 0, let day {

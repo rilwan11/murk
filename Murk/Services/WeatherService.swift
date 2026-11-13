@@ -5,8 +5,15 @@ import Foundation
 struct WeatherService {
     enum ServiceError: LocalizedError {
         case badResponse
-        var errorDescription: String? { "Couldn't load the forecast. Check your connection and try again." }
+        case server(Int, String?)
+        var errorDescription: String? {
+            switch self {
+            case .badResponse: return "The forecast came back incomplete. Tap to retry."
+            case .server(let code, let reason): return "Forecast service error \(code)\(reason.map { ": \($0)" } ?? ""). Tap to retry."
+            }
+        }
     }
+    private struct OMError: Decodable { let reason: String? }
 
     func forecast(for place: Place) async throws -> Forecast {
         var c = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
@@ -20,7 +27,8 @@ struct WeatherService {
             .init(name: "forecast_days", value: "8"),
         ]
         let (data, resp) = try await URLSession.shared.data(from: c.url!)
-        guard (resp as? HTTPURLResponse)?.statusCode == 200 else { throw ServiceError.badResponse }
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        guard code == 200 else { throw ServiceError.server(code, (try? JSONDecoder().decode(OMError.self, from: data))?.reason) }
         let om = try JSONDecoder().decode(OMResponse.self, from: data)
 
         let tz = TimeZone(identifier: om.timezone) ?? TimeZone(secondsFromGMT: om.utc_offset_seconds) ?? .current

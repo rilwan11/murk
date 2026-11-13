@@ -77,8 +77,10 @@ final class AppState: ObservableObject {
             errorMessage = nil
             syncWidget()
         } catch is CancellationError {
+        } catch let e as URLError where e.code == .cancelled {
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? "Couldn't load the forecast."
+            print("Murk forecast error:", error)
+            errorMessage = Self.describe(error)
         }
     }
 
@@ -104,6 +106,8 @@ final class AppState: ObservableObject {
     }
 
     func refreshIfStale() {
+        // Don't interrupt a load that's already running (e.g. right after the location prompt closes).
+        if isLoading { return }
         loadTask?.cancel()
         loadTask = Task {
             if selectedID == nil { await locate() }
@@ -126,6 +130,29 @@ final class AppState: ObservableObject {
         SharedStore.skin = skin
         WidgetCenter.shared.reloadAllTimelines()
     }
+
+    /// A short, readable reason for a failed load, shown under the scene.
+    static func describe(_ error: Error) -> String {
+        if let e = error as? LocalizedError, let d = e.errorDescription { return d }
+        if let e = error as? URLError {
+            switch e.code {
+            case .notConnectedToInternet, .networkConnectionLost: return "You're offline. Tap to retry."
+            case .timedOut: return "The forecast took too long. Tap to retry."
+            default: return "Network error (\(e.code.rawValue)). Tap to retry."
+            }
+        }
+        if let e = error as? DecodingError {
+            switch e {
+            case .keyNotFound(let k, _): return "Forecast data missing “\(k.stringValue)”. Tap to retry."
+            case .typeMismatch(_, let c), .valueNotFound(_, let c):
+                return "Unexpected forecast data at \(c.codingPath.map(\.stringValue).joined(separator: ".")). Tap to retry."
+            default: return "Couldn't read the forecast. Tap to retry."
+            }
+        }
+        return "Couldn't load the forecast. Tap to retry."
+    }
+
+    func retry() { reload { if self.selectedID == nil { await self.locate() } } }
 
     private func savePlaces() {
         if let data = try? JSONEncoder().encode(places) { defaults.set(data, forKey: "places") }
