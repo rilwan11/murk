@@ -16,7 +16,7 @@ enum ArtKind: String, CaseIterable {
 
     var cover: Double {
         switch self {
-        case .clear: return 0.1
+        case .clear: return 0.3
         case .partly: return 0.45
         case .cloudy: return 0.8
         case .rain: return 1.0
@@ -26,7 +26,7 @@ enum ArtKind: String, CaseIterable {
 }
 
 enum WidgetArt {
-    static let version = 2
+    static let version = 3
 
     static func url(_ kind: ArtKind, day: Bool, skin: Skin) -> URL? {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: SharedStore.appGroup)?

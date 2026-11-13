@@ -143,11 +143,13 @@ final class WeatherScene: NSObject {
     /// Renders just the sky (clouds + sun or moon, no digits or rain) to a still image, for widgets.
     func snapshot(cover: Double, isDay: Bool, moonAge: Double, skin: Skin, size: CGSize) -> UIImage? {
         applySkin(skin)
+        // Lighter clouds so they read on any widget background, including tinted glass.
+        cloudMat.diffuse.contents = UIColor(hex: skin.cloudHex).blended(toward: .white, by: 0.28)
         digitNode?.removeFromParentNode(); digitNode = nil
         precipNode.removeAllParticleSystems()
         buildClouds(cover: cover, animated: false)
         buildOrb(isDay: isDay, moonAge: moonAge)
-        scene.background.contents = UIColor(hex: skin.bgHex)
+        scene.background.contents = UIColor(red: 0, green: 1, blue: 0, alpha: 1)   // chroma key: nothing in the sky is green
         cameraNode.position = SCNVector3(0, 2.0, 8.0)
         cameraNode.orientation = SCNQuaternion(0, 0, 0, 1)
         guard let device = MTLCreateSystemDefaultDevice() else { return nil }
@@ -155,7 +157,7 @@ final class WeatherScene: NSObject {
         r.scene = scene
         r.pointOfView = cameraNode
         let img = r.snapshot(atTime: 0, with: size, antialiasingMode: .multisampling4X)
-        return img.keyingOut(hex: skin.bgHex)
+        return img.keyingOutGreen()
     }
 
     @objc func tapped() {
@@ -304,9 +306,19 @@ final class WeatherScene: NSObject {
 }
 
 
+extension UIColor {
+    func blended(toward other: UIColor, by t: CGFloat) -> UIColor {
+        var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0
+        var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0
+        getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
+        other.getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
+        return UIColor(red: r1 + (r2 - r1) * t, green: g1 + (g2 - g1) * t, blue: b1 + (b2 - b1) * t, alpha: 1)
+    }
+}
+
 extension UIImage {
-    /// Makes pixels close to `hex` transparent (soft edge), so the sky has no background square.
-    func keyingOut(hex: UInt32) -> UIImage? {
+    /// Removes a pure-green background (soft edges, with green spill cleaned off the edge pixels).
+    func keyingOutGreen() -> UIImage? {
         guard let cg = cgImage else { return nil }
         let w = cg.width, h = cg.height
         var px = [UInt8](repeating: 0, count: w * h * 4)
@@ -314,17 +326,13 @@ extension UIImage {
                                   space: CGColorSpaceCreateDeviceRGB(),
                                   bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
-        let kr = Double((hex >> 16) & 0xFF), kg = Double((hex >> 8) & 0xFF), kb = Double(hex & 0xFF)
         for i in stride(from: 0, to: px.count, by: 4) {
-            let dr = Double(px[i]) - kr, dg = Double(px[i + 1]) - kg, db = Double(px[i + 2]) - kb
-            let d = (dr * dr + dg * dg + db * db).squareRoot()
-            let a = min(1, max(0, (d - 5) / 30))
-            if a < 1 {
-                px[i] = UInt8(Double(px[i]) * a)
-                px[i + 1] = UInt8(Double(px[i + 1]) * a)
-                px[i + 2] = UInt8(Double(px[i + 2]) * a)
-                px[i + 3] = UInt8(255 * a)
-            }
+            let r = Double(px[i]), g = Double(px[i + 1]), b = Double(px[i + 2])
+            let spill = g - max(r, b)          // how much greener than the scene this pixel is
+            guard spill > 8 else { continue }
+            let a = max(0, min(1, 1 - (spill - 8) / 200))
+            let g2 = min(g, max(r, b))         // despill
+            px[i] = UInt8(r * a); px[i + 1] = UInt8(g2 * a); px[i + 2] = UInt8(b * a); px[i + 3] = UInt8(255 * a)
         }
         guard let out = ctx.makeImage() else { return nil }
         return UIImage(cgImage: out, scale: scale, orientation: imageOrientation)

@@ -189,10 +189,9 @@ struct HeroStack: View {
     var tempSize: CGFloat
 
     var body: some View {
-        VStack(spacing: -tempSize * 0.32) {
+        VStack(spacing: -tempSize * 0.42) {
             Sky3D(code: f.current.code, isDay: f.current.isDay, skin: skin)
-                .frame(width: skySize, height: skySize * 0.62)
-                .clipped()
+                .frame(width: skySize, height: skySize * 0.72)
                 .zIndex(1)
             ExtrudedText(text: "\(u.temp(f.current.temperature))", size: tempSize, skin: skin)
         }
@@ -210,7 +209,7 @@ struct SmallView: View {
             }
             .foregroundStyle(skin.ink)
             .widgetAccentable()
-            HeroStack(f: f, u: u, skin: skin, skySize: 132, tempSize: 74)
+            HeroStack(f: f, u: u, skin: skin, skySize: 150, tempSize: 70)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
