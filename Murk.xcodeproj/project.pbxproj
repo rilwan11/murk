@@ -18,9 +18,11 @@
 		2A45E85691A4EA89EA123AEC /* MoonDisc.swift in Sources */ = {isa = PBXBuildFile; fileRef = BFC98E6885498BD8940A8EE6 /* MoonDisc.swift */; };
 		30F5A1C3F7FDA3A8771FF89E /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40D43AF0F5C3F111EE817C0C /* Components.swift */; };
 		3727539CFC3E874E9EA998FA /* MurkWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 68B4258506023D4584D3DE31 /* MurkWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		41E5B9B04485E2FA3C2BF60C /* Sky.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94D77BEE518ADB6172FE67BF /* Sky.swift */; };
 		55AE05BE975489CD3BE4B699 /* WeatherService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 980C27112EE7F158B391CDA8 /* WeatherService.swift */; };
 		67DA0A0CCB6F9D0777A2B6B3 /* SharedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97F873A692D82024E2276BA0 /* SharedStore.swift */; };
 		69CCC6DE8E9A5B92EA2D21B4 /* Skin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08332E026CEBE5227FF3C287 /* Skin.swift */; };
+		6ACB67E88CB7B404AB4E2D04 /* Sky.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94D77BEE518ADB6172FE67BF /* Sky.swift */; };
 		6CC73E11B9CB70A4ABBEF448 /* SoundEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99A93A1547AE71C4B4015CA5 /* SoundEngine.swift */; };
 		6DC26304B74D9332FE0E1721 /* DetailPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5F6828DFD811F9D61B6A454 /* DetailPages.swift */; };
 		8B3B7BD989DD3B40EB41A529 /* Skin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08332E026CEBE5227FF3C287 /* Skin.swift */; };
@@ -76,6 +78,7 @@
 		68B4258506023D4584D3DE31 /* MurkWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = MurkWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		6F705F7AF48EBF6589A0344E /* MurkWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MurkWidget.entitlements; sourceTree = "<group>"; };
 		929DCA59A79F665756AA13F5 /* MurkWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MurkWidget.swift; sourceTree = "<group>"; };
+		94D77BEE518ADB6172FE67BF /* Sky.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sky.swift; sourceTree = "<group>"; };
 		97F873A692D82024E2276BA0 /* SharedStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedStore.swift; sourceTree = "<group>"; };
 		980C27112EE7F158B391CDA8 /* WeatherService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherService.swift; sourceTree = "<group>"; };
 		99A93A1547AE71C4B4015CA5 /* SoundEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundEngine.swift; sourceTree = "<group>"; };
@@ -97,6 +100,7 @@
 			isa = PBXGroup;
 			children = (
 				08332E026CEBE5227FF3C287 /* Skin.swift */,
+				94D77BEE518ADB6172FE67BF /* Sky.swift */,
 			);
 			path = Theme;
 			sourceTree = "<group>";
@@ -306,6 +310,7 @@
 				16DD71F23813037BFAB1E5C1 /* MurkWidget.swift in Sources */,
 				93558FD27E91B3159DCBDE4C /* SharedStore.swift in Sources */,
 				69CCC6DE8E9A5B92EA2D21B4 /* Skin.swift in Sources */,
+				6ACB67E88CB7B404AB4E2D04 /* Sky.swift in Sources */,
 				043B4ED92227EE43794ADE93 /* Weather.swift in Sources */,
 				EACC29BB0870B6F2AAC72C6A /* WeatherService.swift in Sources */,
 				D087864F090F5044C62E60A4 /* WidgetArt.swift in Sources */,
@@ -330,6 +335,7 @@
 				FAF8C8AD6937312F4827D599 /* SettingsSheet.swift in Sources */,
 				67DA0A0CCB6F9D0777A2B6B3 /* SharedStore.swift in Sources */,
 				8B3B7BD989DD3B40EB41A529 /* Skin.swift in Sources */,
+				41E5B9B04485E2FA3C2BF60C /* Sky.swift in Sources */,
 				6CC73E11B9CB70A4ABBEF448 /* SoundEngine.swift in Sources */,
 				228DA7EEE444C3347B758AE0 /* Weather.swift in Sources */,
 				A61530D279E1319A4132AF32 /* WeatherSceneView.swift in Sources */,
