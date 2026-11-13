@@ -3,7 +3,7 @@ import Foundation
 /// Settings the app shares with its widgets through an App Group.
 /// If the App Group isn't set up (e.g. some free signing setups), widgets fall back to San Diego and °F.
 enum SharedStore {
-    static let appGroup = "group.com.example.murk"
+    static let appGroup = "group.com.rilwan11.murk"
     static var defaults: UserDefaults { UserDefaults(suiteName: appGroup) ?? .standard }
 
     static var place: Place {

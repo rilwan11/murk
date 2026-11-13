@@ -32,7 +32,7 @@ open Murk.xcodeproj
 
 ## Before you build: App Group (needed for widgets)
 
-The app tells the widget which city to show through an App Group called `group.com.example.murk`. When you change the bundle ID (see below), change the group to match, e.g. `group.com.yourname.murk`, in three places:
+The app tells the widget which city to show through an App Group called `group.com.rilwan11.murk`. When you change the bundle ID (see below), change the group to match, e.g. `group.com.yourname.murk`, in three places:
 `Shared/SharedStore.swift`, `project.yml`, and both `.entitlements` files. Then run `xcodegen` again.
 If your Apple account can't create App Groups, the widgets still work but always show San Diego in °F.
 
@@ -50,7 +50,7 @@ If your Apple account can't create App Groups, the widgets still work but always
 ## Run it on your iPhone
 
 1. Plug in your iPhone (or pair it over Wi-Fi) and pick it as the run destination.
-2. Under **Signing & Capabilities**, choose your Team (your Apple ID). If Xcode complains about the bundle ID, change `com.example.murk` to something unique, like `com.yourname.murk`.
+2. Under **Signing & Capabilities**, choose your Team (your Apple ID). If Xcode complains about the bundle ID, change `com.rilwan11.murk` to something unique, like `com.yourname.murk`.
 3. Press **Run** (⌘R).
 4. On the phone, the first time only, go to **Settings → General → VPN & Device Management**, trust your developer profile, and turn on **Developer Mode** if iOS asks.
 
