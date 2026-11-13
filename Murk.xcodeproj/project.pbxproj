@@ -21,6 +21,7 @@
 		55AE05BE975489CD3BE4B699 /* WeatherService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 980C27112EE7F158B391CDA8 /* WeatherService.swift */; };
 		67DA0A0CCB6F9D0777A2B6B3 /* SharedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97F873A692D82024E2276BA0 /* SharedStore.swift */; };
 		69CCC6DE8E9A5B92EA2D21B4 /* Skin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08332E026CEBE5227FF3C287 /* Skin.swift */; };
+		6CC73E11B9CB70A4ABBEF448 /* SoundEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99A93A1547AE71C4B4015CA5 /* SoundEngine.swift */; };
 		6DC26304B74D9332FE0E1721 /* DetailPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5F6828DFD811F9D61B6A454 /* DetailPages.swift */; };
 		8B3B7BD989DD3B40EB41A529 /* Skin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08332E026CEBE5227FF3C287 /* Skin.swift */; };
 		93558FD27E91B3159DCBDE4C /* SharedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97F873A692D82024E2276BA0 /* SharedStore.swift */; };
@@ -30,6 +31,7 @@
 		B4703A41C2F850F0C4EA4107 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 68640EE2DC3A532D4D82ED0D /* Assets.xcassets */; };
 		CC71018D8A6502A1233B00D8 /* SceneSnapshotter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15D4895C37896C6B948986E7 /* SceneSnapshotter.swift */; };
 		D087864F090F5044C62E60A4 /* WidgetArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC4A343F50D536DBF8D010FB /* WidgetArt.swift */; };
+		E56433FBD1308A7CCA71A827 /* BackgroundRefresh.swift in Sources */ = {isa = PBXBuildFile; fileRef = B357558923DCB524F5556BF0 /* BackgroundRefresh.swift */; };
 		EACC29BB0870B6F2AAC72C6A /* WeatherService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 980C27112EE7F158B391CDA8 /* WeatherService.swift */; };
 		EF4C66CCF94A12B846021B74 /* WidgetArt.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC4A343F50D536DBF8D010FB /* WidgetArt.swift */; };
 		FAF8C8AD6937312F4827D599 /* SettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F64494320C87BA029FE78481 /* SettingsSheet.swift */; };
@@ -76,9 +78,12 @@
 		929DCA59A79F665756AA13F5 /* MurkWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MurkWidget.swift; sourceTree = "<group>"; };
 		97F873A692D82024E2276BA0 /* SharedStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedStore.swift; sourceTree = "<group>"; };
 		980C27112EE7F158B391CDA8 /* WeatherService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherService.swift; sourceTree = "<group>"; };
+		99A93A1547AE71C4B4015CA5 /* SoundEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoundEngine.swift; sourceTree = "<group>"; };
 		A9733FDAC02D548167EEC4EC /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		B357558923DCB524F5556BF0 /* BackgroundRefresh.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundRefresh.swift; sourceTree = "<group>"; };
 		BFC98E6885498BD8940A8EE6 /* MoonDisc.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoonDisc.swift; sourceTree = "<group>"; };
 		D7E9591A5E572E0A398B3708 /* Astronomy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Astronomy.swift; sourceTree = "<group>"; };
+		E2E99435E12E0032BB7D049C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		EC4A343F50D536DBF8D010FB /* WidgetArt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetArt.swift; sourceTree = "<group>"; };
 		EF0ECAE5C6D2EB8C223FC878 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		EFC6315B8B0E64D94ED4DFE3 /* Murk.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Murk.entitlements; sourceTree = "<group>"; };
@@ -100,7 +105,9 @@
 			isa = PBXGroup;
 			children = (
 				D7E9591A5E572E0A398B3708 /* Astronomy.swift */,
+				B357558923DCB524F5556BF0 /* BackgroundRefresh.swift */,
 				484F8572A1FEE48949CFA57A /* LocationServices.swift */,
+				99A93A1547AE71C4B4015CA5 /* SoundEngine.swift */,
 				980C27112EE7F158B391CDA8 /* WeatherService.swift */,
 			);
 			path = Services;
@@ -178,6 +185,7 @@
 			isa = PBXGroup;
 			children = (
 				68640EE2DC3A532D4D82ED0D /* Assets.xcassets */,
+				E2E99435E12E0032BB7D049C /* Info.plist */,
 				EFC6315B8B0E64D94ED4DFE3 /* Murk.entitlements */,
 				FF0769FBCC587E943F745F39 /* MurkApp.swift */,
 				E5B1EAC61C88DA685AF34843 /* Models */,
@@ -310,6 +318,7 @@
 			files = (
 				0DEF051AE2CD69B0231C2E41 /* AppState.swift in Sources */,
 				2161CD25FDD04597D9E29E78 /* Astronomy.swift in Sources */,
+				E56433FBD1308A7CCA71A827 /* BackgroundRefresh.swift in Sources */,
 				30F5A1C3F7FDA3A8771FF89E /* Components.swift in Sources */,
 				6DC26304B74D9332FE0E1721 /* DetailPages.swift in Sources */,
 				1CD161413AC7CFB856999611 /* LocationServices.swift in Sources */,
@@ -321,6 +330,7 @@
 				FAF8C8AD6937312F4827D599 /* SettingsSheet.swift in Sources */,
 				67DA0A0CCB6F9D0777A2B6B3 /* SharedStore.swift in Sources */,
 				8B3B7BD989DD3B40EB41A529 /* Skin.swift in Sources */,
+				6CC73E11B9CB70A4ABBEF448 /* SoundEngine.swift in Sources */,
 				228DA7EEE444C3347B758AE0 /* Weather.swift in Sources */,
 				A61530D279E1319A4132AF32 /* WeatherSceneView.swift in Sources */,
 				55AE05BE975489CD3BE4B699 /* WeatherService.swift in Sources */,
@@ -413,6 +423,7 @@
 				CODE_SIGN_ENTITLEMENTS = Murk/Murk.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Murk/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Murk;
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Murk uses your location to show the weather where you are.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -497,6 +508,7 @@
 				CODE_SIGN_ENTITLEMENTS = Murk/Murk.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Murk/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Murk;
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Murk uses your location to show the weather where you are.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
