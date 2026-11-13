@@ -251,8 +251,17 @@ struct NowView: View {
             thunder: (95...99).contains(cond.code),
             sunAltitude: (alt / 2).rounded() * 2,
             sunRising: Astronomy.sunAltitude(latitude: lat, longitude: lon, at: moment.addingTimeInterval(1800)) >= alt,
+            moonAltitude: (Self.moonAltitude(lat, lon, moment) / 2).rounded() * 2,
+            moonRising: Self.moonAltitude(lat, lon, moment.addingTimeInterval(1800)) >= Self.moonAltitude(lat, lon, moment),
             regenToken: regen,
             resetToken: reset)
+    }
+
+    /// The moon follows roughly the sun's path, running behind it by its age
+    /// (a full moon rides highest at midnight, a new moon travels with the sun).
+    static func moonAltitude(_ lat: Double, _ lon: Double, _ date: Date) -> Double {
+        let lag = Astronomy.moonAge(date) / Astronomy.synodicMonth * 86_400
+        return Astronomy.sunAltitude(latitude: lat, longitude: lon, at: date.addingTimeInterval(-lag))
     }
 
     private var soundKey: String {

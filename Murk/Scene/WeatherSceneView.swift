@@ -17,6 +17,8 @@ struct SceneConfig: Equatable {
     var thunder = false
     var sunAltitude: Double = 45     // degrees, rounded by the caller
     var sunRising = true             // morning (dawn colors) vs afternoon (dusk colors)
+    var moonAltitude: Double = 45    // degrees above the horizon, rounded by the caller
+    var moonRising = true
     var regenToken: Int = 0
     var resetToken: Int = 0
 }
@@ -94,6 +96,30 @@ final class WeatherScene: NSObject {
     _output.color.rgb += (gn - 0.5) * 0.012;
     """
 
+    private static let white: UIImage = UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4)).image { ctx in
+        UIColor.white.setFill(); ctx.fill(CGRect(x: 0, y: 0, width: 4, height: 4))
+    }
+
+    private static let sunShader = """
+    float sunHash(float2 p) { return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453); }
+    float sunNoise(float2 p) {
+        float2 i = floor(p), f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(sunHash(i), sunHash(i + float2(1, 0)), f.x),
+                   mix(sunHash(i + float2(0, 1)), sunHash(i + float2(1, 1)), f.x), f.y);
+    }
+    #pragma body
+    float mu = clamp(dot(normalize(_surface.normal), float3(0.0, 0.0, 1.0)), 0.0, 1.0);
+    float2 uv = _surface.diffuseTexcoord * float2(48.0, 24.0);
+    float t = scn_frame.time * 0.08;
+    float gran = sunNoise(uv + t) * 0.6 + sunNoise(uv * 2.3 - t * 1.3) * 0.4;
+    float3 base = _output.color.rgb;
+    float3 c = base * (0.42 + 0.58 * pow(mu, 0.55));          // limb darkening
+    c = mix(c, float3(1.0, 0.98, 0.9), pow(mu, 3.0) * 0.45);  // white-hot core
+    c *= 0.9 + 0.2 * gran;                                    // granulation
+    _output.color.rgb = c;
+    """
+
     override init() {
         super.init()
         scene.background.contents = UIColor.clear
@@ -146,9 +172,16 @@ final class WeatherScene: NSObject {
         cloudMat.metalness.contents = 0.0
         digitMat.roughness.contents = 0.42
         digitMat.metalness.contents = 0.25
-        moonMat.lightingModel = .lambert
-        moonMat.shaderModifiers = [.fragment: Self.grain]
+        // Moon: cratered surface with real relief, lit by the sun so the phase shows.
+        moonMat.lightingModel = .physicallyBased
+        moonMat.diffuse.contents = MoonSurface.albedo
+        moonMat.normal.contents = MoonSurface.normal
+        moonMat.normal.intensity = 0.9
+        moonMat.roughness.contents = 0.95
+        moonMat.metalness.contents = 0.0
+        // Sun: glowing plasma with limb darkening (bright core, deeper-colored edge) and slow granulation.
         sunMat.lightingModel = .constant
+        sunMat.shaderModifiers = [.fragment: Self.sunShader]
     }
 
     // MARK: Updates
@@ -161,8 +194,10 @@ final class WeatherScene: NSObject {
         if force || p?.precip != c.precip || p?.intensity != c.intensity || p?.skin != c.skin {
             buildPrecip(c.precip, intensity: c.intensity, skin: c.skin)
         }
-        if force || p?.isDay != c.isDay || p?.moonAge != c.moonAge || p?.sunAltitude != c.sunAltitude || p?.sunRising != c.sunRising || p?.skin != c.skin {
-            buildOrb(isDay: c.isDay, moonAge: c.moonAge, sunAltitude: c.sunAltitude, rising: c.sunRising, skin: c.skin)
+        if force || p?.isDay != c.isDay || p?.moonAge != c.moonAge || p?.sunAltitude != c.sunAltitude || p?.sunRising != c.sunRising || p?.skin != c.skin
+            || p?.moonAltitude != c.moonAltitude || p?.moonRising != c.moonRising {
+            buildOrb(isDay: c.isDay, moonAge: c.moonAge, sunAltitude: c.sunAltitude, rising: c.sunRising,
+                     moonAltitude: c.moonAltitude, moonRising: c.moonRising, skin: c.skin, animated: p != nil)
             applyTimeOfDay(c.isDay ? c.sunAltitude : min(c.sunAltitude, -8))
         }
         if force || p?.isDay != c.isDay || p?.cover != c.cover || p?.precip != c.precip {
@@ -188,7 +223,7 @@ final class WeatherScene: NSObject {
         precipNode.removeAllParticleSystems()
         starNode.isHidden = true
         buildClouds(cover: cover, animated: false)
-        buildOrb(isDay: isDay, moonAge: moonAge, sunAltitude: 45, skin: skin, glow: false)
+        buildOrb(isDay: isDay, moonAge: moonAge, sunAltitude: 45, skin: skin, glow: false, fixed: true)
         scene.background.contents = UIColor(red: 0, green: 1, blue: 0, alpha: 1)   // chroma key: nothing in the sky is green
         cameraNode.position = SCNVector3(0, 2.0, 8.0)
         cameraNode.orientation = SCNQuaternion(0, 0, 0, 1)
@@ -381,8 +416,7 @@ final class WeatherScene: NSObject {
     private func applySkin(_ s: Skin) {
         cloudMat.diffuse.contents = UIColor(hex: s.cloudHex)
         digitMat.diffuse.contents = UIColor(hex: s.digitHex)
-        moonMat.diffuse.contents = UIColor(hex: s.moonHex)
-        sunMat.diffuse.contents = UIColor(hex: s.sunHex)
+        moonMat.multiply.contents = UIColor(hex: s.moonHex)
     }
 
     // MARK: Builders
@@ -489,30 +523,52 @@ final class WeatherScene: NSObject {
         return (rising ? dawn : dusk).blended(toward: noon, by: eased)
     }
 
-    private func buildOrb(isDay: Bool, moonAge: Double, sunAltitude: Double, rising: Bool = true, skin: Skin, glow: Bool = true) {
+    /// Where a body sits on its arc: rises on the left (east), peaks overhead behind the clouds,
+    /// sets on the right (west), and sinks below the cloud base as it goes under the horizon.
+    static func arcPosition(altitude: Double, rising: Bool) -> SCNVector3 {
+        let h = min(max(altitude, -8), 65) / 65
+        let up = max(h, 0)
+        let side: Float = rising ? -1 : 1
+        let x = side * 2.6 * Float(pow(1 - up, 0.85))
+        let y = 0.55 + 2.05 * Float(sin(up * .pi / 2)) + (h < 0 ? Float(h) * 6 : 0)
+        return SCNVector3(x, y, -1.9)
+    }
+
+    private func buildOrb(isDay: Bool, moonAge: Double, sunAltitude: Double, rising: Bool = true,
+                          moonAltitude: Double = 45, moonRising: Bool = false,
+                          skin: Skin, glow: Bool = true, fixed: Bool = false, animated: Bool = false) {
         orbNode.childNodes.forEach { $0.removeFromParentNode() }
-        let sphere = SCNSphere(radius: 1)
-        sphere.segmentCount = 64
+        let sphere = SCNSphere(radius: 0.85)
+        sphere.segmentCount = 96
+        let alt = isDay ? sunAltitude : moonAltitude
+        let target = fixed ? SCNVector3(1.15, 2.45, -1.6) : Self.arcPosition(altitude: alt, rising: isDay ? rising : moonRising)
+        // Fade out as it slips under the horizon.
+        let opacity = fixed ? 1 : CGFloat(min(1, max(0, (alt + 3) / 5)))
+        SCNTransaction.begin(); SCNTransaction.animationDuration = animated ? 1.2 : 0
+        orbNode.position = target
+        orbNode.opacity = opacity
+        SCNTransaction.commit()
         if isDay {
             sphere.materials = [sunMat]
             orbNode.categoryBitMask = 1
-            // Low sun sits near the cloud base and glows orange at golden hour.
-            let a = min(max(sunAltitude, 0), 40) / 40
-            orbNode.position = SCNVector3(1.15, Float(1.35 + 1.1 * a), -1.6)
             let sunColor = Self.sunColor(altitude: sunAltitude, rising: rising)
-            sunMat.diffuse.contents = sunColor
+            sunMat.diffuse.contents = Self.white
+            sunMat.multiply.contents = sunColor
             if glow { addSunGlow(color: sunColor) }
         } else {
-            orbNode.position = SCNVector3(1.15, 2.45, -1.6)
             // Light the moon from where the sun really is, so the lit part matches tonight's phase.
             sphere.materials = [moonMat]
             orbNode.categoryBitMask = 2
             let th = 2 * Double.pi * moonAge / Astronomy.synodicMonth
-            let o = orbNode.position
+            let o = target
             moonLight.position = SCNVector3(o.x + Float(sin(th)) * 10, o.y + 0.8, o.z - Float(cos(th)) * 10)
             moonLight.look(at: o)
+            if glow { addMoonGlow() }
         }
         orbNode.geometry = sphere
+        orbNode.removeAction(forKey: "spin")
+        orbNode.eulerAngles = SCNVector3(0, isDay ? orbNode.eulerAngles.y : -.pi / 2, 0)   // moon shows its near side
+        if !fixed && isDay { orbNode.runAction(.repeatForever(.rotateBy(x: 0, y: .pi * 2, z: 0, duration: 240)), forKey: "spin") }
     }
 }
 
@@ -536,17 +592,34 @@ extension WeatherScene {
             let n = SCNNode(geometry: g); n.opacity = opacity; n.categoryBitMask = 4
             return n
         }
-        let halo = plane(5.2, Self.haloImage, 0.85)
-        let pulse = SCNAction.sequence([.scale(to: 1.06, duration: 2.6), .scale(to: 0.96, duration: 2.6)])
+        // Two soft layers: a tight bright corona and a wide faint bloom.
+        let corona = plane(3.2, Self.haloImage, 0.9)
+        let bloom = plane(7.5, Self.haloImage, 0.35)
+        let pulse = SCNAction.sequence([.scale(to: 1.04, duration: 3.2), .scale(to: 0.97, duration: 3.2)])
         pulse.timingMode = .easeInEaseOut
-        halo.runAction(.repeatForever(pulse))
-        let rays = plane(4.6, Self.raysImage, 0.55)
-        rays.runAction(.repeatForever(.rotateBy(x: 0, y: 0, z: .pi * 2, duration: 90)))
-        holder.addChildNode(halo)
-        holder.addChildNode(rays)
+        corona.runAction(.repeatForever(pulse))
+        holder.addChildNode(bloom)
+        holder.addChildNode(corona)
         // Glow sits behind the sun disc (orb sphere radius 1 inside a 5-wide halo).
         holder.renderingOrder = -1
         orbNode.addChildNode(holder)
+    }
+
+    /// A faint silver glow around the moon.
+    fileprivate func addMoonGlow() {
+        let g = SCNPlane(width: 3.4, height: 3.4)
+        let m = SCNMaterial()
+        m.lightingModel = .constant
+        m.diffuse.contents = Self.haloImage
+        m.multiply.contents = UIColor(red: 0.75, green: 0.82, blue: 1, alpha: 1)
+        m.blendMode = .add
+        m.writesToDepthBuffer = false
+        g.materials = [m]
+        let n = SCNNode(geometry: g)
+        n.opacity = 0.28
+        n.categoryBitMask = 4
+        n.constraints = [SCNBillboardConstraint()]
+        orbNode.addChildNode(n)
     }
 
     fileprivate static let haloImage: UIImage = UIGraphicsImageRenderer(size: CGSize(width: 256, height: 256)).image { ctx in
@@ -558,22 +631,6 @@ extension WeatherScene {
                                          endCenter: CGPoint(x: 128, y: 128), endRadius: 128, options: [])
     }
 
-    fileprivate static let raysImage: UIImage = UIGraphicsImageRenderer(size: CGSize(width: 512, height: 512)).image { ctx in
-        let c = ctx.cgContext
-        c.translateBy(x: 256, y: 256)
-        c.setLineCap(.round)
-        for i in 0..<12 {
-            c.saveGState()
-            c.rotate(by: CGFloat(i) * .pi / 6)
-            let long = i % 2 == 0
-            c.setStrokeColor(UIColor(white: 1, alpha: long ? 0.7 : 0.45).cgColor)
-            c.setLineWidth(long ? 12 : 8)
-            c.move(to: CGPoint(x: 0, y: 128))
-            c.addLine(to: CGPoint(x: 0, y: long ? 222 : 188))
-            c.strokePath()
-            c.restoreGState()
-        }
-    }
 }
 
 extension UIColor {
