@@ -93,11 +93,20 @@ private extension Font {
 /// The temperature as a sculpted, extruded slab — stacked offset layers for depth,
 /// a lit gradient face and a faint highlight edge, like the 3D digits in the app.
 struct ExtrudedText: View {
+    @Environment(\.widgetRenderingMode) private var mode
     let text: String
     let size: CGFloat
     let skin: Skin
 
     var body: some View {
+        if mode == .fullColor { sculpted } else {
+            // Tinted / clear home screens recolor everything, so stacked depth layers turn into a blob.
+            Text(text).font(.bigTemp(size)).widgetAccentable()
+                .lineLimit(1).minimumScaleFactor(0.5)
+        }
+    }
+
+    private var sculpted: some View {
         let f = Font.bigTemp(size)
         let face = Color(hex: skin.digitHex)
         let depth = 9
@@ -131,7 +140,7 @@ struct Sky3D: View {
         let kind = ArtKind(code: code)
         ZStack {
             if let ui = WidgetArt.image(kind, day: isDay, skin: skin) {
-                Image(uiImage: ui).resizable().scaledToFit()
+                skyImage(ui)
             } else {
                 CloudArt(cover: kind.cover, isDay: isDay, skin: skin).padding(10)
             }
@@ -152,6 +161,15 @@ struct Sky3D: View {
                 }
             }
         }
+    }
+}
+
+@ViewBuilder
+private func skyImage(_ ui: UIImage) -> some View {
+    if #available(iOS 18.0, *) {
+        Image(uiImage: ui).widgetAccentedRenderingMode(.fullColor).resizable().scaledToFit()
+    } else {
+        Image(uiImage: ui).resizable().scaledToFit()
     }
 }
 
@@ -184,15 +202,16 @@ struct HeroStack: View {
 struct SmallView: View {
     let f: Forecast, u: TempUnit, skin: Skin
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            HeroStack(f: f, u: u, skin: skin, skySize: 150, tempSize: 80)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .offset(y: 4)
+        VStack(spacing: 0) {
             HStack(spacing: 3) {
                 if f.place.isCurrentLocation { Image(systemName: "location.fill").font(.system(size: 8, weight: .bold)) }
                 Text(f.place.name).font(.system(size: 12, weight: .heavy)).lineLimit(1)
+                Spacer(minLength: 0)
             }
             .foregroundStyle(skin.ink)
+            .widgetAccentable()
+            HeroStack(f: f, u: u, skin: skin, skySize: 132, tempSize: 74)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }

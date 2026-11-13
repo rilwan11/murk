@@ -154,7 +154,8 @@ final class WeatherScene: NSObject {
         let r = SCNRenderer(device: device, options: nil)
         r.scene = scene
         r.pointOfView = cameraNode
-        return r.snapshot(atTime: 0, with: size, antialiasingMode: .multisampling4X)
+        let img = r.snapshot(atTime: 0, with: size, antialiasingMode: .multisampling4X)
+        return img.keyingOut(hex: skin.bgHex)
     }
 
     @objc func tapped() {
@@ -299,5 +300,33 @@ final class WeatherScene: NSObject {
             moonLight.look(at: o)
         }
         orbNode.geometry = sphere
+    }
+}
+
+
+extension UIImage {
+    /// Makes pixels close to `hex` transparent (soft edge), so the sky has no background square.
+    func keyingOut(hex: UInt32) -> UIImage? {
+        guard let cg = cgImage else { return nil }
+        let w = cg.width, h = cg.height
+        var px = [UInt8](repeating: 0, count: w * h * 4)
+        guard let ctx = CGContext(data: &px, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                  space: CGColorSpaceCreateDeviceRGB(),
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        ctx.draw(cg, in: CGRect(x: 0, y: 0, width: w, height: h))
+        let kr = Double((hex >> 16) & 0xFF), kg = Double((hex >> 8) & 0xFF), kb = Double(hex & 0xFF)
+        for i in stride(from: 0, to: px.count, by: 4) {
+            let dr = Double(px[i]) - kr, dg = Double(px[i + 1]) - kg, db = Double(px[i + 2]) - kb
+            let d = (dr * dr + dg * dg + db * db).squareRoot()
+            let a = min(1, max(0, (d - 5) / 30))
+            if a < 1 {
+                px[i] = UInt8(Double(px[i]) * a)
+                px[i + 1] = UInt8(Double(px[i + 1]) * a)
+                px[i + 2] = UInt8(Double(px[i + 2]) * a)
+                px[i + 3] = UInt8(255 * a)
+            }
+        }
+        guard let out = ctx.makeImage() else { return nil }
+        return UIImage(cgImage: out, scale: scale, orientation: imageOrientation)
     }
 }

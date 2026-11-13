@@ -26,7 +26,7 @@ enum ArtKind: String, CaseIterable {
 }
 
 enum WidgetArt {
-    static let version = 1
+    static let version = 2
 
     static func url(_ kind: ArtKind, day: Bool, skin: Skin) -> URL? {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: SharedStore.appGroup)?
