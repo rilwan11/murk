@@ -166,10 +166,11 @@ struct Sky3D: View {
 
 @ViewBuilder
 private func skyImage(_ ui: UIImage) -> some View {
+    // Fill the width (the clouds sit in the middle band of the square render) so they read larger.
     if #available(iOS 18.0, *) {
-        Image(uiImage: ui).resizable().widgetAccentedRenderingMode(.fullColor).scaledToFit()
+        Image(uiImage: ui).resizable().widgetAccentedRenderingMode(.fullColor).scaledToFill()
     } else {
-        Image(uiImage: ui).resizable().scaledToFit()
+        Image(uiImage: ui).resizable().scaledToFill()
     }
 }
 
@@ -187,19 +188,31 @@ struct HeroStack: View {
     let f: Forecast, u: TempUnit, skin: Skin
     var skySize: CGFloat
     var tempSize: CGFloat
+    var skyRatio: CGFloat = 0.62
+    var showHiLo = false
 
     var body: some View {
-        VStack(spacing: -tempSize * 0.42) {
-            Sky3D(code: f.current.code, isDay: f.current.isDay, skin: skin)
-                .frame(width: skySize, height: skySize * 0.72)
-                .zIndex(1)
-            ExtrudedText(text: "\(u.temp(f.current.temperature))", size: tempSize, skin: skin)
+        VStack(spacing: 0) {
+            VStack(spacing: -tempSize * 0.42) {
+                Sky3D(code: f.current.code, isDay: f.current.isDay, skin: skin)
+                    .frame(width: skySize, height: skySize * skyRatio)
+                    .clipped()
+                    .zIndex(1)
+                ExtrudedText(text: "\(u.temp(f.current.temperature))", size: tempSize, skin: skin)
+            }
+            if showHiLo, let d = f.daily.first {
+                Text("H \(u.temp(d.high))°  L \(u.temp(d.low))°")
+                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(skin.muted)
+                    .widgetAccentable()
+            }
         }
     }
 }
 
 struct SmallView: View {
     let f: Forecast, u: TempUnit, skin: Skin
+    var showHiLo = false
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 3) {
@@ -209,7 +222,8 @@ struct SmallView: View {
             }
             .foregroundStyle(skin.ink)
             .widgetAccentable()
-            HeroStack(f: f, u: u, skin: skin, skySize: 150, tempSize: 70)
+            HeroStack(f: f, u: u, skin: skin, skySize: 152, tempSize: showHiLo ? 72 : 86,
+                      skyRatio: showHiLo ? 0.56 : 0.62, showHiLo: showHiLo)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
@@ -219,7 +233,7 @@ struct MediumView: View {
     let f: Forecast, u: TempUnit, skin: Skin
     var body: some View {
         HStack(spacing: 10) {
-            SmallView(f: f, u: u, skin: skin).frame(width: 140)
+            SmallView(f: f, u: u, skin: skin, showHiLo: true).frame(width: 152)
             VStack(alignment: .leading, spacing: 6) {
                 Text(f.current.condition.title).font(.system(size: 15, weight: .black)).lineLimit(1)
                     .foregroundStyle(skin.ink)
@@ -251,7 +265,7 @@ struct LargeView: View {
                 Text(f.place.name).font(.system(size: 16, weight: .heavy)).lineLimit(1)
             }
             .foregroundStyle(skin.ink)
-            HeroStack(f: f, u: u, skin: skin, skySize: 230, tempSize: 118)
+            HeroStack(f: f, u: u, skin: skin, skySize: 300, tempSize: 130, skyRatio: 0.5)
                 .frame(height: 190)
             Text(f.current.condition.title).font(.system(size: 18, weight: .black)).foregroundStyle(skin.ink)
             Spacer(minLength: 0)
