@@ -20,8 +20,10 @@ struct WeatherService {
         c.queryItems = [
             .init(name: "latitude", value: String(place.latitude)),
             .init(name: "longitude", value: String(place.longitude)),
-            .init(name: "current", value: "temperature_2m,apparent_temperature,weather_code,is_day,wind_speed_10m,wind_gusts_10m,wind_direction_10m,relative_humidity_2m,surface_pressure,visibility,uv_index"),
-            .init(name: "hourly", value: "temperature_2m,precipitation_probability"),
+            .init(name: "current", value: "temperature_2m,apparent_temperature,weather_code,is_day,precipitation,wind_speed_10m,wind_gusts_10m,wind_direction_10m,relative_humidity_2m,surface_pressure,visibility,uv_index"),
+            .init(name: "hourly", value: "temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,is_day,wind_speed_10m,wind_direction_10m"),
+            .init(name: "minutely_15", value: "precipitation"),
+            .init(name: "forecast_minutely_15", value: "12"),
             .init(name: "daily", value: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,sunrise,sunset,uv_index_max,wind_speed_10m_max,wind_gusts_10m_max"),
             .init(name: "timezone", value: "auto"),
             .init(name: "forecast_days", value: "8"),
@@ -42,6 +44,7 @@ struct WeatherService {
             code: cur.weather_code ?? 0,
             isDay: (cur.is_day ?? 1) == 1,
             windSpeed: cur.wind_speed_10m, windGust: cur.wind_gusts_10m, windDirection: cur.wind_direction_10m,
+            precipitation: cur.precipitation,
             humidity: cur.relative_humidity_2m, pressure: cur.surface_pressure,
             visibility: cur.visibility, uvIndex: cur.uv_index)
 
@@ -67,13 +70,51 @@ struct WeatherService {
         if let h = om.hourly {
             for (i, ts) in h.time.enumerated() {
                 guard let t = dt.date(from: ts), i < h.temperature_2m.count, let temp = h.temperature_2m[i] else { continue }
-                let p = (h.precipitation_probability.flatMap { i < $0.count ? $0[i] : nil }) ?? 0
-                hours.append(HourlyPoint(time: t, temperature: temp, precipChance: Int(p.rounded())))
+                func hv<T>(_ a: [T?]?) -> T? { guard let a, i < a.count else { return nil }; return a[i] }
+                let p = hv(h.precipitation_probability) ?? 0
+                hours.append(HourlyPoint(time: t, temperature: temp, precipChance: Int(p.rounded()),
+                                         code: hv(h.weather_code) ?? 0, isDay: (hv(h.is_day) ?? 1) == 1,
+                                         windSpeed: hv(h.wind_speed_10m) ?? 0, windDirection: hv(h.wind_direction_10m) ?? 0,
+                                         precip: hv(h.precipitation) ?? 0, apparent: hv(h.apparent_temperature)))
             }
         }
 
-        let aqi = try? await airQuality(for: place)
-        return Forecast(place: place, current: current, daily: days, hourly: hours, aqi: aqi, timeZone: tz, fetchedAt: Date())
+        var minutes: [MinutePoint] = []
+        if let mq = om.minutely_15 {
+            for (i, ts) in mq.time.enumerated() {
+                guard let t = dt.date(from: ts) else { continue }
+                let v = (mq.precipitation.flatMap { i < $0.count ? $0[i] : nil }) ?? 0
+                minutes.append(MinutePoint(time: t, precip: v))
+            }
+        }
+
+        async let aqiTask = try? airQuality(for: place)
+        async let alertTask = try? self.alerts(for: place)
+        let aqi = await aqiTask
+        let activeAlerts = await alertTask ?? []
+        return Forecast(place: place, current: current, daily: days, hourly: hours, minutely: minutes,
+                        alerts: activeAlerts, aqi: aqi, timeZone: tz, fetchedAt: Date())
+    }
+
+    /// Active alerts from the US National Weather Service (empty outside the US).
+    func alerts(for place: Place) async throws -> [WeatherAlert] {
+        let lat = String(format: "%.4f", place.latitude), lon = String(format: "%.4f", place.longitude)
+        guard let url = URL(string: "https://api.weather.gov/alerts/active?point=\(lat),\(lon)") else { return [] }
+        var req = URLRequest(url: url)
+        req.setValue("Murk weather app (github.com/rilwan11/murk)", forHTTPHeaderField: "User-Agent")
+        req.setValue("application/geo+json", forHTTPHeaderField: "Accept")
+        req.timeoutInterval = 10
+        let (data, resp) = try await URLSession.shared.data(for: req)
+        guard (resp as? HTTPURLResponse)?.statusCode == 200 else { return [] }
+        let r = try JSONDecoder().decode(NWSResponse.self, from: data)
+        let iso = ISO8601DateFormatter()
+        return r.features.compactMap { f in
+            let p = f.properties
+            guard let event = p.event else { return nil }
+            return WeatherAlert(id: p.id ?? f.id ?? event, event: event, headline: p.headline ?? event,
+                                severity: p.severity ?? "Unknown",
+                                ends: (p.ends ?? p.expires).flatMap { iso.date(from: $0) })
+        }
     }
 
     private func airQuality(for place: Place) async throws -> Int? {
@@ -97,6 +138,21 @@ private struct OMResponse: Decodable {
     let current: OMCurrent?
     let hourly: OMHourly?
     let daily: OMDaily?
+    let minutely_15: OMMinutely?
+}
+
+private struct OMMinutely: Decodable {
+    let time: [String]
+    let precipitation: [Double?]?
+}
+
+private struct NWSResponse: Decodable {
+    struct Feature: Decodable { let id: String?; let properties: Props }
+    struct Props: Decodable {
+        let id: String?; let event: String?; let headline: String?; let severity: String?
+        let ends: String?; let expires: String?
+    }
+    let features: [Feature]
 }
 
 private struct OMCurrent: Decodable {
@@ -107,6 +163,7 @@ private struct OMCurrent: Decodable {
     let wind_speed_10m: Double?
     let wind_gusts_10m: Double?
     let wind_direction_10m: Double?
+    let precipitation: Double?
     let relative_humidity_2m: Double?
     let surface_pressure: Double?
     let visibility: Double?
@@ -116,7 +173,13 @@ private struct OMCurrent: Decodable {
 private struct OMHourly: Decodable {
     let time: [String]
     let temperature_2m: [Double?]
+    let apparent_temperature: [Double?]?
     let precipitation_probability: [Double?]?
+    let precipitation: [Double?]?
+    let weather_code: [Int?]?
+    let is_day: [Int?]?
+    let wind_speed_10m: [Double?]?
+    let wind_direction_10m: [Double?]?
 }
 
 private struct OMDaily: Decodable {

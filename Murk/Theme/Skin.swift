@@ -2,28 +2,34 @@ import SwiftUI
 import UIKit
 
 enum Skin: String, CaseIterable, Identifiable {
-    case graphite, ember, aurora
+    case graphite, ember, aurora, fog, storm, sunset
     var id: String { rawValue }
     var name: String { rawValue.capitalized }
 
     // Hex palettes, shared by SwiftUI and SceneKit.
-    var bgHex: UInt32 { pick(0x1D1D1D, 0xF0A23A, 0x0C0B1A) }
-    var inkHex: UInt32 { pick(0xFFFFFF, 0x1A1206, 0xFFFFFF) }
-    var mutedHex: UInt32 { pick(0x7A7A7A, 0x7A4D10, 0x8C86B8) }
-    var lineHex: UInt32 { pick(0x333333, 0xB57422, 0x2E2A52) }
-    var cloudHex: UInt32 { pick(0x2E2E2E, 0x4A2C0A, 0x4B3AA8) }
-    var digitHex: UInt32 { pick(0x2A2A2A, 0x3E2508, 0x3D31A0) }
-    var moonHex: UInt32 { pick(0xE9ECEC, 0xFFF2D6, 0xB9F3FF) }
-    var sunHex: UInt32 { pick(0xE5393A, 0xFFFFFF, 0xFF7AE0) }
+    var bgHex: UInt32 { pick(0x1D1D1D, 0xF0A23A, 0x0C0B1A, 0xD9DCDE, 0x0F1A24, 0x2A1630) }
+    var inkHex: UInt32 { pick(0xFFFFFF, 0x1A1206, 0xFFFFFF, 0x1C1F22, 0xE8F1F8, 0xFFE9DC) }
+    var mutedHex: UInt32 { pick(0x7A7A7A, 0x7A4D10, 0x8C86B8, 0x6B7076, 0x6E8494, 0xB08197) }
+    var lineHex: UInt32 { pick(0x333333, 0xB57422, 0x2E2A52, 0xB4B9BE, 0x22384A, 0x4A2A52) }
+    var cloudHex: UInt32 { pick(0x2E2E2E, 0x4A2C0A, 0x4B3AA8, 0x9AA0A6, 0x2B3C4C, 0x5A3460) }
+    var digitHex: UInt32 { pick(0x2A2A2A, 0x3E2508, 0x3D31A0, 0xB0B5BA, 0x24384A, 0x4A2A55) }
+    var moonHex: UInt32 { pick(0xE9ECEC, 0xFFF2D6, 0xB9F3FF, 0xFFFFFF, 0xDDEBFF, 0xFFE0C2) }
+    var sunHex: UInt32 { pick(0xE5393A, 0xFFFFFF, 0xFF7AE0, 0xFF6B3D, 0xFFC44D, 0xFF7A45) }
     var accentHex: UInt32 { 0xF2B33D }
 
-    private func pick(_ g: UInt32, _ e: UInt32, _ a: UInt32) -> UInt32 {
+    private func pick(_ g: UInt32, _ e: UInt32, _ a: UInt32, _ f: UInt32, _ st: UInt32, _ su: UInt32) -> UInt32 {
         switch self {
         case .graphite: return g
         case .ember: return e
         case .aurora: return a
+        case .fog: return f
+        case .storm: return st
+        case .sunset: return su
         }
     }
+
+    /// Light skins get dark text and a light status bar style.
+    var isLight: Bool { self == .ember || self == .fog }
     var rainHex: UInt32 { 0x3EA0FF }
 
     var bg: Color { Color(hex: bgHex) }
@@ -42,6 +48,9 @@ enum Skin: String, CaseIterable, Identifiable {
         case .graphite: return AnyShapeStyle(LinearGradient(colors: [Color(hex: 0x3A3A3A), Color(hex: 0x1E1E1E)], startPoint: .topLeading, endPoint: .bottomTrailing))
         case .ember: return AnyShapeStyle(LinearGradient(colors: [Color(hex: 0xF5B445), Color(hex: 0xEC9A33)], startPoint: .topLeading, endPoint: .bottomTrailing))
         case .aurora: return AnyShapeStyle(Color(hex: 0x08071A))
+        case .fog: return AnyShapeStyle(LinearGradient(colors: [Color(hex: 0xE6E9EB), Color(hex: 0xC9CED2)], startPoint: .topLeading, endPoint: .bottomTrailing))
+        case .storm: return AnyShapeStyle(LinearGradient(colors: [Color(hex: 0x16283A), Color(hex: 0x0A121A)], startPoint: .topLeading, endPoint: .bottomTrailing))
+        case .sunset: return AnyShapeStyle(LinearGradient(colors: [Color(hex: 0xFF8A5B), Color(hex: 0x6B2D6E), Color(hex: 0x2A1630)], startPoint: .top, endPoint: .bottom))
         }
     }
     var gem: AnyShapeStyle {
@@ -49,9 +58,20 @@ enum Skin: String, CaseIterable, Identifiable {
         case .graphite: return AnyShapeStyle(RadialGradient(colors: [Color(hex: 0x666666), Color(hex: 0x1A1A1A)], center: .init(x: 0.35, y: 0.3), startRadius: 0, endRadius: 60))
         case .ember: return AnyShapeStyle(RadialGradient(colors: [Color(hex: 0x6A4310), Color(hex: 0x120A02)], center: .init(x: 0.35, y: 0.3), startRadius: 0, endRadius: 60))
         case .aurora: return AnyShapeStyle(LinearGradient(colors: [Color(hex: 0xFF9BF0), Color(hex: 0x4B6BFF), Color(hex: 0x9EFFFF)], startPoint: .topLeading, endPoint: .bottomTrailing))
+        case .fog: return AnyShapeStyle(RadialGradient(colors: [Color(hex: 0xFFFFFF), Color(hex: 0x9AA0A6)], center: .init(x: 0.35, y: 0.3), startRadius: 0, endRadius: 60))
+        case .storm: return AnyShapeStyle(RadialGradient(colors: [Color(hex: 0x4A6A86), Color(hex: 0x0A121A)], center: .init(x: 0.35, y: 0.3), startRadius: 0, endRadius: 60))
+        case .sunset: return AnyShapeStyle(LinearGradient(colors: [Color(hex: 0xFFD08A), Color(hex: 0xFF5E62)], startPoint: .topLeading, endPoint: .bottomTrailing))
         }
     }
-    var swatchText: Color { self == .ember ? Color(hex: 0x1A1206) : (self == .aurora ? Color(hex: 0xC9B8FF) : .white) }
+    var swatchText: Color {
+        switch self {
+        case .ember: return Color(hex: 0x1A1206)
+        case .fog: return Color(hex: 0x1C1F22)
+        case .aurora: return Color(hex: 0xC9B8FF)
+        case .sunset: return Color(hex: 0xFFE9DC)
+        default: return .white
+        }
+    }
 }
 
 extension Color {

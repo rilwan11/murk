@@ -130,6 +130,7 @@ struct CurrentWeather {
     var windSpeed: Double?
     var windGust: Double?
     var windDirection: Double?
+    var precipitation: Double?
     var humidity: Double?
     var pressure: Double?
     var visibility: Double?
@@ -160,6 +161,29 @@ struct HourlyPoint: Identifiable {
     var time: Date
     var temperature: Double
     var precipChance: Int
+    var code: Int = 0
+    var isDay: Bool = true
+    var windSpeed: Double = 0
+    var windDirection: Double = 0
+    var precip: Double = 0          // mm in the hour
+    var apparent: Double?
+
+    var condition: Condition { Condition(code: code, isDay: isDay) }
+}
+
+/// 15-minute precipitation, used for "rain starts in 12 min".
+struct MinutePoint {
+    var time: Date
+    var precip: Double              // mm in the 15 minutes
+}
+
+/// An official weather alert (US: National Weather Service).
+struct WeatherAlert: Identifiable, Hashable {
+    var id: String
+    var event: String
+    var headline: String
+    var severity: String
+    var ends: Date?
 }
 
 struct Forecast {
@@ -167,6 +191,8 @@ struct Forecast {
     var current: CurrentWeather
     var daily: [DailyWeather]
     var hourly: [HourlyPoint]
+    var minutely: [MinutePoint] = []
+    var alerts: [WeatherAlert] = []
     var aqi: Int?
     var timeZone: TimeZone
     var fetchedAt: Date

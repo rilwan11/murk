@@ -1,6 +1,8 @@
 import Foundation
 import SwiftUI
 import WidgetKit
+import UIKit
+import UserNotifications
 
 @MainActor
 final class AppState: ObservableObject {
@@ -21,6 +23,8 @@ final class AppState: ObservableObject {
     @Published var skin: Skin { didSet { defaults.set(skin.rawValue, forKey: "skin"); syncWidget() } }
     @Published var minimal: Bool { didSet { defaults.set(minimal, forKey: "minimal") } }
     @Published var alerts: Bool { didSet { defaults.set(alerts, forKey: "alerts") } }
+    @Published var autoSkin: Bool { didSet { defaults.set(autoSkin, forKey: "autoSkin"); if autoSkin { resolveAutoSkin() } } }
+    @Published var sound: Bool { didSet { defaults.set(sound, forKey: "sound"); SoundEngine.shared.enabled = sound } }
 
     private let defaults = UserDefaults.standard
     private let location = LocationManager()
@@ -39,6 +43,68 @@ final class AppState: ObservableObject {
         skin = Skin(rawValue: defaults.string(forKey: "skin") ?? "") ?? .graphite
         minimal = defaults.bool(forKey: "minimal")
         alerts = defaults.object(forKey: "alerts") as? Bool ?? true
+        autoSkin = defaults.bool(forKey: "autoSkin")
+        sound = defaults.object(forKey: "sound") as? Bool ?? true
+        SoundEngine.shared.enabled = sound
+    }
+
+    /// Pick a skin from the weather: warm on sunny days, aurora at night, storm in rain, fog when grey.
+    func resolveAutoSkin() {
+        guard autoSkin, let c = forecast?.current else { return }
+        let s: Skin
+        switch c.code {
+        case 95...99, 61...67, 80...82, 51...57: s = .storm
+        case 71...77, 85, 86, 45, 48: s = .fog
+        case 0, 1: s = c.isDay ? .ember : .aurora
+        case 2: s = c.isDay ? .sunset : .aurora
+        default: s = c.isDay ? .graphite : .aurora
+        }
+        if s != skin { skin = s }
+    }
+
+    // MARK: Cities
+
+    /// nil = current location, then saved cities in order.
+    var cityIDs: [String?] {
+        var list: [String?] = locationDenied ? [] : [nil]
+        list += places.map { Optional($0.id) }
+        return list
+    }
+
+    var cityIndex: Int { cityIDs.firstIndex(where: { $0 == selectedID }) ?? 0 }
+
+    func cycleCity(_ delta: Int) {
+        let list = cityIDs
+        guard list.count > 1 else { return }
+        let next = list[(cityIndex + delta + list.count) % list.count]
+        UISelectionFeedbackGenerator().selectionChanged()
+        if let id = next, let p = places.first(where: { $0.id == id }) { select(p) } else { selectCurrentLocation() }
+    }
+
+    // MARK: Alerts → notifications
+
+    private func notifyNewAlerts(_ list: [WeatherAlert], place: Place) {
+        guard alerts, !list.isEmpty else { return }
+        var seen = Set(defaults.stringArray(forKey: "seenAlerts") ?? [])
+        let fresh = list.filter { !seen.contains($0.id) }
+        guard !fresh.isEmpty else { return }
+        fresh.forEach { seen.insert($0.id) }
+        defaults.set(Array(seen.suffix(200)), forKey: "seenAlerts")
+        Self.postNotifications(fresh, place: place)
+    }
+
+    nonisolated static func postNotifications(_ list: [WeatherAlert], place: Place) {
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert, .sound]) { ok, _ in
+            guard ok else { return }
+            for a in list {
+                let c = UNMutableNotificationContent()
+                c.title = "\(a.event) · \(place.name)"
+                c.body = a.headline
+                c.sound = .default
+                center.add(UNNotificationRequest(identifier: a.id, content: c, trigger: nil))
+            }
+        }
     }
 
     var activePlace: Place? {
@@ -75,7 +141,9 @@ final class AppState: ObservableObject {
             guard (activePlace ?? places.first)?.id == place.id else { return } // user switched meanwhile
             forecast = f
             errorMessage = nil
+            resolveAutoSkin()
             syncWidget()
+            notifyNewAlerts(f.alerts, place: f.place)
         } catch is CancellationError {
         } catch let e as URLError where e.code == .cancelled {
         } catch {
@@ -162,6 +230,13 @@ final class AppState: ObservableObject {
 
     // MARK: Derived
 
+    /// The next 24 hours (starting with the current hour) for the scrubber.
+    var upcomingHours: [HourlyPoint] {
+        guard let f = forecast else { return [] }
+        let now = Date().addingTimeInterval(-3600)
+        return Array(f.hourly.filter { $0.time > now }.prefix(25))
+    }
+
     /// Days from today onward in the forecast's own time zone.
     var days: [DailyWeather] { forecast?.daily ?? [] }
 
@@ -169,6 +244,24 @@ final class AppState: ObservableObject {
         var c = Calendar(identifier: .gregorian)
         c.timeZone = forecast?.timeZone ?? .current
         return c
+    }
+
+    /// "RAIN IN 15 MIN" / "RAIN STOPS IN 30 MIN" from the 15-minute forecast, or nil.
+    var nextHourRain: String? {
+        guard let f = forecast else { return nil }
+        let now = Date()
+        let pts = f.minutely.filter { $0.time.addingTimeInterval(15 * 60) > now }.prefix(8)
+        guard !pts.isEmpty else { return nil }
+        let wet: (MinutePoint) -> Bool = { $0.precip >= 0.1 }
+        let raining = (f.current.precipitation ?? 0) > 0.05 || wet(pts.first!)
+        let word = f.current.condition.precip == .snow ? "SNOW" : "RAIN"
+        func mins(_ p: MinutePoint) -> Int { max(5, Int((p.time.timeIntervalSince(now) / 60 / 5).rounded()) * 5) }
+        if raining {
+            if let dry = pts.first(where: { !wet($0) }) { return "\(word) STOPS IN \(mins(dry)) MIN" }
+            return nil
+        }
+        if let first = pts.first(where: wet) { return "\(word) IN \(mins(first)) MIN" }
+        return nil
     }
 
     func dayLabel(_ d: DailyWeather, index: Int) -> String {
@@ -186,6 +279,8 @@ final class AppState: ObservableObject {
     /// A short heads-up for the pill above the scene, or nil.
     var headsUp: String? {
         guard alerts, let f = forecast else { return nil }
+        if let a = f.alerts.first { return a.event.uppercased() }
+        if let r = nextHourRain { return r }
         if f.current.condition.precip == .rain { return "RAIN NOW" }
         if f.current.condition.precip == .snow { return "SNOW NOW" }
         for (i, d) in f.daily.prefix(3).enumerated() where d.precipChance >= 40 {

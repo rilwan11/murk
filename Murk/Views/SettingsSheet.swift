@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import UIKit
 
 struct SettingsSheet: View {
     @EnvironmentObject var state: AppState
@@ -7,6 +8,8 @@ struct SettingsSheet: View {
     @StateObject private var search = CitySearch()
     @State private var adding = false
     @FocusState private var searchFocused: Bool
+    @State private var wallpaperNote: String?
+    @State private var makingWallpaper = false
 
     var body: some View {
         NavigationStack {
@@ -14,9 +17,11 @@ struct SettingsSheet: View {
                 Section {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
+                            AutoSkinCard(selected: state.autoSkin)
+                                .onTapGesture { withAnimation { state.autoSkin = true } }
                             ForEach(Skin.allCases) { skin in
-                                SkinCard(skin: skin, selected: state.skin == skin)
-                                    .onTapGesture { withAnimation { state.skin = skin } }
+                                SkinCard(skin: skin, selected: !state.autoSkin && state.skin == skin)
+                                    .onTapGesture { withAnimation { state.autoSkin = false; state.skin = skin } }
                             }
                         }
                         .padding(.vertical, 4)
@@ -81,9 +86,28 @@ struct SettingsSheet: View {
                     } label: { Label("Units", systemImage: "thermometer.medium") }
                     .pickerStyle(.segmented)
                     Toggle(isOn: $state.minimal) { Label("Minimal mode", systemImage: "eye.slash") }
-                    Toggle(isOn: $state.alerts) { Label("Heads-up pill", systemImage: "exclamationmark.triangle") }
+                    Toggle(isOn: $state.alerts) { Label("Alerts & heads-up pill", systemImage: "exclamationmark.triangle") }
+                    Toggle(isOn: $state.sound) { Label("Weather sounds", systemImage: "speaker.wave.2") }
                 } header: { header("Settings") }
                 .tint(state.skin.accent)
+
+                Section {
+                    Button {
+                        makeWallpaper()
+                    } label: {
+                        HStack {
+                            Label("Save weather wallpaper", systemImage: "photo.on.rectangle.angled")
+                            Spacer()
+                            if makingWallpaper { ProgressView() }
+                        }
+                    }
+                    .disabled(state.forecast == nil || makingWallpaper)
+                    if let wallpaperNote {
+                        Text(wallpaperNote).font(.footnote).foregroundStyle(.secondary)
+                    }
+                } header: { header("Wallpaper") } footer: {
+                    Text("Renders today's 3D weather as a lock-screen wallpaper and saves it to Photos. Set it from Photos → Share → Use as Wallpaper.")
+                }
 
                 if let f = state.forecast, !f.daily.isEmpty {
                     let hot = f.daily.max { $0.high < $1.high }!
@@ -153,6 +177,27 @@ struct SettingsSheet: View {
         }
     }
 
+    private func makeWallpaper() {
+        guard let f = state.forecast else { return }
+        makingWallpaper = true
+        let c = f.current.condition
+        let alt = Astronomy.sunAltitude(latitude: f.place.latitude, longitude: f.place.longitude)
+        let config = SceneConfig(temperature: String(state.unit.temp(f.current.temperature)), cover: c.cloudCover,
+                                 precip: .none, intensity: 0, isDay: f.current.isDay || alt > -2,
+                                 moonAge: Astronomy.moonAge(), skin: state.skin,
+                                 windSpeed: 0, windDirection: 0, thunder: false, sunAltitude: (alt / 2).rounded() * 2)
+        let px = UIScreen.main.nativeBounds.size
+        DispatchQueue.main.async {
+            let image = WeatherScene().wallpaper(config, size: CGSize(width: px.width, height: px.height))
+            makingWallpaper = false
+            guard let image else { wallpaperNote = "Couldn't render the wallpaper."; return }
+            WallpaperSaver.shared.save(image) { ok in
+                wallpaperNote = ok ? "Saved to Photos. Open it and tap Share → Use as Wallpaper."
+                                   : "Couldn't save. Allow Murk to add photos in Settings → Privacy → Photos."
+            }
+        }
+    }
+
     private func label(_ d: DailyWeather, _ f: Forecast) -> String {
         let i = f.daily.firstIndex { $0.date == d.date } ?? 0
         return i == 0 ? "Today" : state.dayLabel(d, index: i).capitalized
@@ -178,5 +223,39 @@ struct SkinCard: View {
         .frame(width: 124, height: 150)
         .overlay(RoundedRectangle(cornerRadius: 22).stroke(selected ? Color.white : .clear, lineWidth: 3))
         .contentShape(Rectangle())
+    }
+}
+
+struct AutoSkinCard: View {
+    let selected: Bool
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            RoundedRectangle(cornerRadius: 22).fill(LinearGradient(colors: [Color(hex: 0xF5B445), Color(hex: 0x6B2D6E), Color(hex: 0x0F1A24)],
+                                                                   startPoint: .topLeading, endPoint: .bottomTrailing))
+            Image(systemName: "wand.and.stars").font(.system(size: 40, weight: .semibold)).foregroundStyle(.white.opacity(0.9))
+                .frame(maxWidth: .infinity, maxHeight: .infinity).offset(y: -18)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Auto").font(.system(size: 17, weight: .heavy))
+                Text("Follows the weather").font(.system(size: 10, weight: .medium)).opacity(0.8)
+            }
+            .foregroundStyle(.white).padding(14)
+        }
+        .frame(width: 124, height: 150)
+        .overlay(RoundedRectangle(cornerRadius: 22).stroke(selected ? Color.white : .clear, lineWidth: 3))
+        .contentShape(Rectangle())
+    }
+}
+
+/// Bridges UIImageWriteToSavedPhotosAlbum's target/selector callback to a closure.
+final class WallpaperSaver: NSObject {
+    static let shared = WallpaperSaver()
+    private var done: ((Bool) -> Void)?
+    func save(_ image: UIImage, done: @escaping (Bool) -> Void) {
+        self.done = done
+        UIImageWriteToSavedPhotosAlbum(image, self, #selector(finished(_:didFinishSavingWithError:contextInfo:)), nil)
+    }
+    @objc private func finished(_ image: UIImage, didFinishSavingWithError error: Error?, contextInfo: UnsafeRawPointer) {
+        let cb = done; done = nil
+        DispatchQueue.main.async { cb?(error == nil) }
     }
 }

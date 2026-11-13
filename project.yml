@@ -20,6 +20,22 @@ targets:
       - Shared
     dependencies:
       - target: MurkWidget
+    info:
+      path: Murk/Info.plist
+      properties:
+        CFBundleDisplayName: Murk
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.rilwan11.murk.refresh
+        UIBackgroundModes:
+          - fetch
+        NSPhotoLibraryAddUsageDescription: "Murk saves weather wallpapers to your Photos."
+        NSLocationWhenInUseUsageDescription: "Murk uses your location to show the weather where you are."
+        UILaunchScreen: {}
+        UIUserInterfaceStyle: Dark
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
     entitlements:
       path: Murk/Murk.entitlements
       properties:

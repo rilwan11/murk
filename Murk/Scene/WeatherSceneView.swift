@@ -12,6 +12,10 @@ struct SceneConfig: Equatable {
     var isDay: Bool
     var moonAge: Double
     var skin: Skin
+    var windSpeed: Double = 0        // km/h
+    var windDirection: Double = 0    // degrees the wind comes FROM
+    var thunder = false
+    var sunAltitude: Double = 45     // degrees, rounded by the caller
     var regenToken: Int = 0
     var resetToken: Int = 0
 }
@@ -20,6 +24,8 @@ struct SceneConfig: Equatable {
 /// including fully over the top and underneath. Pinch zooms. Tap grows new clouds.
 struct WeatherSceneView: UIViewRepresentable {
     var config: SceneConfig
+    var onThunder: (() -> Void)? = nil
+    var onTap: (() -> Void)? = nil
 
     func makeCoordinator() -> WeatherScene { WeatherScene() }
 
@@ -45,6 +51,8 @@ struct WeatherSceneView: UIViewRepresentable {
     }
 
     func updateUIView(_ v: SCNView, context: Context) {
+        context.coordinator.onThunder = onThunder
+        context.coordinator.onTap = onTap
         context.coordinator.apply(config)
     }
 }
@@ -62,7 +70,13 @@ final class WeatherScene: NSObject {
     private let orbNode = SCNNode()
     private let precipNode = SCNNode()
     private let moonLight = SCNNode()
+    private let keyLight = SCNNode()
+    private let rimLight = SCNNode()
+    private let ambLight = SCNNode()
+    private let flashLight = SCNNode()
     private var digitNode: SCNNode?
+    var onThunder: (() -> Void)?
+    var onTap: (() -> Void)?
     private var last: SceneConfig?
 
     private let cloudMat = SCNMaterial()
@@ -104,9 +118,16 @@ final class WeatherScene: NSObject {
             if let p { n.position = p; n.look(at: SCNVector3Zero) }
             return n
         }
-        scene.rootNode.addChildNode(light(.directional, 1150, mask: 1, at: SCNVector3(-5, 7, 6)))   // key
-        scene.rootNode.addChildNode(light(.directional, 480, mask: 1, at: SCNVector3(4, 3, -7)))    // rim
-        scene.rootNode.addChildNode(light(.ambient, 150, mask: 1, at: nil))
+        for (node, src) in [(keyLight, light(.directional, 1150, mask: 1, at: SCNVector3(-5, 7, 6))),
+                            (rimLight, light(.directional, 480, mask: 1, at: SCNVector3(4, 3, -7))),
+                            (ambLight, light(.ambient, 150, mask: 1, at: nil))] {
+            node.light = src.light; node.position = src.position; node.orientation = src.orientation
+            scene.rootNode.addChildNode(node)
+        }
+        let fl = SCNLight(); fl.type = .omni; fl.intensity = 0; fl.categoryBitMask = 1
+        fl.color = UIColor(red: 0.85, green: 0.9, blue: 1, alpha: 1); fl.attenuationEndDistance = 6
+        flashLight.light = fl; flashLight.position = SCNVector3(0, 1.6, 0.4)
+        root.addChildNode(flashLight)
         scene.rootNode.addChildNode(light(.ambient, 22, mask: 2, at: nil))                           // earthshine
         let ml = SCNLight(); ml.type = .directional; ml.intensity = 1300; ml.categoryBitMask = 2
         moonLight.light = ml
@@ -135,7 +156,14 @@ final class WeatherScene: NSObject {
         if force || p?.precip != c.precip || p?.intensity != c.intensity || p?.skin != c.skin {
             buildPrecip(c.precip, intensity: c.intensity, skin: c.skin)
         }
-        if force || p?.isDay != c.isDay || p?.moonAge != c.moonAge { buildOrb(isDay: c.isDay, moonAge: c.moonAge) }
+        if force || p?.isDay != c.isDay || p?.moonAge != c.moonAge || p?.sunAltitude != c.sunAltitude || p?.skin != c.skin {
+            buildOrb(isDay: c.isDay, moonAge: c.moonAge, sunAltitude: c.sunAltitude, skin: c.skin)
+            applyTimeOfDay(c.isDay ? c.sunAltitude : min(c.sunAltitude, -8))
+        }
+        if force || p?.windSpeed != c.windSpeed || p?.windDirection != c.windDirection || p?.precip != c.precip || p?.intensity != c.intensity {
+            applyWind(speed: c.windSpeed, from: c.windDirection)
+        }
+        if force || p?.thunder != c.thunder { setThunder(c.thunder) }
         if let p, p.resetToken != c.resetToken { resetCamera(animated: true) }
         last = c
     }
@@ -148,7 +176,7 @@ final class WeatherScene: NSObject {
         digitNode?.removeFromParentNode(); digitNode = nil
         precipNode.removeAllParticleSystems()
         buildClouds(cover: cover, animated: false)
-        buildOrb(isDay: isDay, moonAge: moonAge)
+        buildOrb(isDay: isDay, moonAge: moonAge, sunAltitude: 45, skin: skin)
         scene.background.contents = UIColor(red: 0, green: 1, blue: 0, alpha: 1)   // chroma key: nothing in the sky is green
         cameraNode.position = SCNVector3(0, 2.0, 8.0)
         cameraNode.orientation = SCNQuaternion(0, 0, 0, 1)
@@ -162,6 +190,86 @@ final class WeatherScene: NSObject {
 
     @objc func tapped() {
         if let c = last { buildClouds(cover: c.cover) }
+        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
+        onTap?()
+    }
+
+    /// Full-scene still (clouds, digits, sun/moon) sized for a phone wallpaper.
+    func wallpaper(_ c: SceneConfig, size: CGSize) -> UIImage? {
+        apply(c, force: true)
+        precipNode.removeAllParticleSystems()
+        scene.background.contents = UIColor(hex: c.skin.bgHex)
+        let cam = SCNNode(); let camera = SCNCamera(); camera.fieldOfView = 34; camera.zFar = 100
+        cam.camera = camera
+        let aspect = Float(size.width / size.height)
+        let dist = max(7.0 / (2 * tan(17 * Float.pi / 180)), 5.2 / (2 * tan(17 * Float.pi / 180) * aspect))
+        cam.position = SCNVector3(0, 1.4, dist)
+        scene.rootNode.addChildNode(cam)
+        defer { cam.removeFromParentNode() }
+        guard let device = MTLCreateSystemDefaultDevice() else { return nil }
+        let r = SCNRenderer(device: device, options: nil)
+        r.scene = scene; r.pointOfView = cam
+        return r.snapshot(atTime: 0, with: size, antialiasingMode: .multisampling4X)
+    }
+
+    // MARK: Atmosphere
+
+    /// Warm light at dawn/dusk, white at midday, cool and dim at night.
+    private func applyTimeOfDay(_ alt: Double) {
+        let key: (UIColor, CGFloat), amb: (UIColor, CGFloat)
+        switch alt {
+        case ..<(-4):  key = (UIColor(red: 0.55, green: 0.65, blue: 0.95, alpha: 1), 420); amb = (UIColor(red: 0.6, green: 0.7, blue: 1, alpha: 1), 110)
+        case ..<4:     key = (UIColor(red: 1.0, green: 0.55, blue: 0.38, alpha: 1), 820); amb = (UIColor(red: 0.9, green: 0.7, blue: 0.75, alpha: 1), 130)
+        case ..<15:    key = (UIColor(red: 1.0, green: 0.8, blue: 0.58, alpha: 1), 1000); amb = (UIColor(red: 1, green: 0.92, blue: 0.85, alpha: 1), 140)
+        default:       key = (.white, 1150); amb = (.white, 150)
+        }
+        SCNTransaction.begin(); SCNTransaction.animationDuration = 1.2
+        keyLight.light?.color = key.0; keyLight.light?.intensity = key.1
+        ambLight.light?.color = amb.0; ambLight.light?.intensity = amb.1
+        rimLight.light?.color = key.0
+        SCNTransaction.commit()
+    }
+
+    /// Clouds drift and rain slants with the wind.
+    private func applyWind(speed: Double, from dir: Double) {
+        let w = min(1, max(0, speed / 45))
+        let toward = (dir + 180) * Double.pi / 180
+        let xs = Float(sin(toward)) * Float(w)              // east-west push on screen
+        cloudNode.removeAction(forKey: "wind")
+        if w > 0.05 {
+            let amp = CGFloat(0.12 + 0.45 * w) * (xs >= 0 ? 1 : -1)
+            let d = 7.0 / (0.4 + w)
+            let sway = SCNAction.sequence([.moveBy(x: amp, y: 0, z: 0, duration: d), .moveBy(x: -amp, y: 0, z: 0, duration: d)])
+            sway.timingMode = .easeInEaseOut
+            cloudNode.runAction(.repeatForever(sway), forKey: "wind")
+        } else {
+            cloudNode.runAction(.move(to: SCNVector3Zero, duration: 1))
+        }
+        for ps in precipNode.particleSystems ?? [] {
+            ps.emittingDirection = SCNVector3(xs * 0.7, -1, 0)
+            ps.acceleration = SCNVector3(xs * 4, 0, 0)
+        }
+    }
+
+    /// Lightning: random flickers inside the clouds while a storm is on.
+    private func setThunder(_ on: Bool) {
+        flashLight.removeAction(forKey: "storm")
+        flashLight.light?.intensity = 0
+        guard on else { return }
+        let flash = SCNAction.customAction(duration: 0.55) { node, t in
+            let k = Double(t / 0.55)
+            let i = k < 0.12 ? 1 : (k < 0.22 ? 0.15 : (k < 0.32 ? 0.8 : max(0, 1 - (k - 0.32) / 0.68)))
+            node.light?.intensity = CGFloat(i * 5200)
+        }
+        let strike = SCNAction.sequence([
+            .run { [weak self] node in
+                node.position = SCNVector3(Float.random(in: -1.2...1.2), Float.random(in: 1.3...2.0), 0.4)
+                DispatchQueue.main.async { self?.onThunder?() }
+            },
+            flash,
+            .wait(duration: 4, withRange: 6)
+        ])
+        flashLight.runAction(.sequence([.wait(duration: 1.5), .repeatForever(strike)]), forKey: "storm")
     }
 
     func resetCamera(animated: Bool) {
@@ -286,13 +394,19 @@ final class WeatherScene: NSObject {
         ctx.cgContext.fillEllipse(in: CGRect(x: 0, y: 0, width: 16, height: 16))
     }
 
-    private func buildOrb(isDay: Bool, moonAge: Double) {
+    private func buildOrb(isDay: Bool, moonAge: Double, sunAltitude: Double, skin: Skin) {
         let sphere = SCNSphere(radius: 1)
         sphere.segmentCount = 64
         if isDay {
             sphere.materials = [sunMat]
             orbNode.categoryBitMask = 1
+            // Low sun sits near the cloud base and glows orange at golden hour.
+            let a = min(max(sunAltitude, 0), 40) / 40
+            orbNode.position = SCNVector3(1.15, Float(1.35 + 1.1 * a), -1.6)
+            let golden = max(0, 1 - sunAltitude / 14)
+            sunMat.diffuse.contents = UIColor(hex: skin.sunHex).blended(toward: UIColor(red: 1, green: 0.55, blue: 0.2, alpha: 1), by: CGFloat(golden * 0.75))
         } else {
+            orbNode.position = SCNVector3(1.15, 2.45, -1.6)
             // Light the moon from where the sun really is, so the lit part matches tonight's phase.
             sphere.materials = [moonMat]
             orbNode.categoryBitMask = 2

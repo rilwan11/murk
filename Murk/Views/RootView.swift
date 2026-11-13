@@ -2,9 +2,16 @@ import SwiftUI
 
 /// Reports the 3D stage's frame so page swipes that start on it are left to the scene.
 struct StageFrameKey: PreferenceKey {
-    static var defaultValue: CGRect = .zero
-    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
-        let n = nextValue(); if n != .zero { value = n }
+    static var defaultValue: [CGRect] = []
+    static func reduce(value: inout [CGRect], nextValue: () -> [CGRect]) { value += nextValue() }
+}
+
+extension View {
+    /// Marks this view's area as "don't page here" (the 3D scene, the day scrubber, the city header).
+    func noPageSwipe() -> some View {
+        background(GeometryReader { g in
+            Color.clear.preference(key: StageFrameKey.self, value: [g.frame(in: .named("root"))])
+        })
     }
 }
 
@@ -13,7 +20,7 @@ struct RootView: View {
     @State private var page = 0
     @State private var drag: CGFloat = 0
     @State private var dragActive = false
-    @State private var stageFrame: CGRect = .zero
+    @State private var noSwipe: [CGRect] = []
     @State private var showSettings = false
 
     private let pageCount = 5
@@ -41,10 +48,10 @@ struct RootView: View {
                     .padding(.bottom, 4)
             }
             .coordinateSpace(name: "root")
-            .onPreferenceChange(StageFrameKey.self) { stageFrame = $0 }
+            .onPreferenceChange(StageFrameKey.self) { noSwipe = $0 }
         }
         .foregroundStyle(skin.ink)
-        .preferredColorScheme(skin == .ember ? .light : .dark)
+        .preferredColorScheme(skin.isLight ? .light : .dark)
         .sheet(isPresented: $showSettings) {
             SettingsSheet().environmentObject(state)
         }
@@ -55,7 +62,7 @@ struct RootView: View {
         DragGesture(minimumDistance: 18, coordinateSpace: .named("root"))
             .onChanged { v in
                 // Drags that begin on the 3D scene spin it instead of paging.
-                if page == 0 && stageFrame.contains(v.startLocation) { return }
+                if page == 0 && noSwipe.contains(where: { $0.contains(v.startLocation) }) { return }
                 guard abs(v.translation.width) > abs(v.translation.height) || dragActive else { return }
                 dragActive = true
                 var t = v.translation.width
