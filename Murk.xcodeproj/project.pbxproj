@@ -25,6 +25,7 @@
 		6ACB67E88CB7B404AB4E2D04 /* Sky.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94D77BEE518ADB6172FE67BF /* Sky.swift */; };
 		6CC73E11B9CB70A4ABBEF448 /* SoundEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99A93A1547AE71C4B4015CA5 /* SoundEngine.swift */; };
 		6DC26304B74D9332FE0E1721 /* DetailPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5F6828DFD811F9D61B6A454 /* DetailPages.swift */; };
+		8A8B1A17E14A438272FDAD39 /* MoonSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 552FF4519B62128C2431BD83 /* MoonSurface.swift */; };
 		8B3B7BD989DD3B40EB41A529 /* Skin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08332E026CEBE5227FF3C287 /* Skin.swift */; };
 		93558FD27E91B3159DCBDE4C /* SharedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97F873A692D82024E2276BA0 /* SharedStore.swift */; };
 		A61530D279E1319A4132AF32 /* WeatherSceneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FCBDFF6266A50E6B93009C3 /* WeatherSceneView.swift */; };
@@ -73,6 +74,7 @@
 		40D43AF0F5C3F111EE817C0C /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
 		484F8572A1FEE48949CFA57A /* LocationServices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationServices.swift; sourceTree = "<group>"; };
 		5238DD594A6BAA277365E2D2 /* Murk.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Murk.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		552FF4519B62128C2431BD83 /* MoonSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoonSurface.swift; sourceTree = "<group>"; };
 		5FCBDFF6266A50E6B93009C3 /* WeatherSceneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WeatherSceneView.swift; sourceTree = "<group>"; };
 		68640EE2DC3A532D4D82ED0D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		68B4258506023D4584D3DE31 /* MurkWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = MurkWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -169,6 +171,7 @@
 		ACDCA5019099D8861E3B7ADE /* Scene */ = {
 			isa = PBXGroup;
 			children = (
+				552FF4519B62128C2431BD83 /* MoonSurface.swift */,
 				15D4895C37896C6B948986E7 /* SceneSnapshotter.swift */,
 				5FCBDFF6266A50E6B93009C3 /* WeatherSceneView.swift */,
 			);
@@ -328,6 +331,7 @@
 				6DC26304B74D9332FE0E1721 /* DetailPages.swift in Sources */,
 				1CD161413AC7CFB856999611 /* LocationServices.swift in Sources */,
 				2A45E85691A4EA89EA123AEC /* MoonDisc.swift in Sources */,
+				8A8B1A17E14A438272FDAD39 /* MoonSurface.swift in Sources */,
 				A7F7F2A3A4F685C150F3A4EB /* MurkApp.swift in Sources */,
 				19236CE063FF25C28B8D5983 /* NowView.swift in Sources */,
 				ACC4D82084C49A5396A59829 /* RootView.swift in Sources */,
