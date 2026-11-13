@@ -215,11 +215,13 @@ struct NowView: View {
         let day = f.daily.indices.contains(selectedDay) ? f.daily[selectedDay] : nil
 
         var cond: Condition, temp: Double, isDay: Bool, wind: Double, dir: Double, alt: Double
+        var moment = Date()
         var precip: Precip, intensity: Double
         if let h = hourPoint {
             cond = h.condition; temp = h.temperature; isDay = h.isDay
             wind = h.windSpeed; dir = h.windDirection
             alt = Astronomy.sunAltitude(latitude: lat, longitude: lon, at: h.time)
+            moment = h.time
             precip = cond.precip == .none && h.precipChance >= 50 ? .rain : cond.precip
             intensity = cond.intensity > 0 ? cond.intensity : (h.precip > 0.1 ? min(1, h.precip / 3) : (precip == .none ? 0 : 0.3))
         } else if today {
@@ -248,6 +250,7 @@ struct NowView: View {
             windDirection: (dir / 15).rounded() * 15,
             thunder: (95...99).contains(cond.code),
             sunAltitude: (alt / 2).rounded() * 2,
+            sunRising: Astronomy.sunAltitude(latitude: lat, longitude: lon, at: moment.addingTimeInterval(1800)) >= alt,
             regenToken: regen,
             resetToken: reset)
     }

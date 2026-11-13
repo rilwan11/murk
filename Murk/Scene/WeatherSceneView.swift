@@ -16,6 +16,7 @@ struct SceneConfig: Equatable {
     var windDirection: Double = 0    // degrees the wind comes FROM
     var thunder = false
     var sunAltitude: Double = 45     // degrees, rounded by the caller
+    var sunRising = true             // morning (dawn colors) vs afternoon (dusk colors)
     var regenToken: Int = 0
     var resetToken: Int = 0
 }
@@ -160,8 +161,8 @@ final class WeatherScene: NSObject {
         if force || p?.precip != c.precip || p?.intensity != c.intensity || p?.skin != c.skin {
             buildPrecip(c.precip, intensity: c.intensity, skin: c.skin)
         }
-        if force || p?.isDay != c.isDay || p?.moonAge != c.moonAge || p?.sunAltitude != c.sunAltitude || p?.skin != c.skin {
-            buildOrb(isDay: c.isDay, moonAge: c.moonAge, sunAltitude: c.sunAltitude, skin: c.skin)
+        if force || p?.isDay != c.isDay || p?.moonAge != c.moonAge || p?.sunAltitude != c.sunAltitude || p?.sunRising != c.sunRising || p?.skin != c.skin {
+            buildOrb(isDay: c.isDay, moonAge: c.moonAge, sunAltitude: c.sunAltitude, rising: c.sunRising, skin: c.skin)
             applyTimeOfDay(c.isDay ? c.sunAltitude : min(c.sunAltitude, -8))
         }
         if force || p?.isDay != c.isDay || p?.cover != c.cover || p?.precip != c.precip {
@@ -478,7 +479,17 @@ final class WeatherScene: NSObject {
         ctx.cgContext.fillEllipse(in: CGRect(x: 0, y: 0, width: 16, height: 16))
     }
 
-    private func buildOrb(isDay: Bool, moonAge: Double, sunAltitude: Double, skin: Skin, glow: Bool = true) {
+    /// Sun color through the day: reddish-yellow at dawn, yellow by midday, red at dusk.
+    static func sunColor(altitude: Double, rising: Bool) -> UIColor {
+        let dawn = UIColor(red: 1.0, green: 0.56, blue: 0.22, alpha: 1)    // reddish yellow
+        let noon = UIColor(red: 1.0, green: 0.85, blue: 0.3, alpha: 1)     // yellow
+        let dusk = UIColor(red: 0.93, green: 0.25, blue: 0.16, alpha: 1)   // red
+        let t = CGFloat(min(1, max(0, altitude / 35)))
+        let eased = t * t * (3 - 2 * t)
+        return (rising ? dawn : dusk).blended(toward: noon, by: eased)
+    }
+
+    private func buildOrb(isDay: Bool, moonAge: Double, sunAltitude: Double, rising: Bool = true, skin: Skin, glow: Bool = true) {
         orbNode.childNodes.forEach { $0.removeFromParentNode() }
         let sphere = SCNSphere(radius: 1)
         sphere.segmentCount = 64
@@ -488,8 +499,7 @@ final class WeatherScene: NSObject {
             // Low sun sits near the cloud base and glows orange at golden hour.
             let a = min(max(sunAltitude, 0), 40) / 40
             orbNode.position = SCNVector3(1.15, Float(1.35 + 1.1 * a), -1.6)
-            let golden = max(0, 1 - sunAltitude / 14)
-            let sunColor = UIColor(hex: skin.sunHex).blended(toward: UIColor(red: 1, green: 0.55, blue: 0.2, alpha: 1), by: CGFloat(golden * 0.75))
+            let sunColor = Self.sunColor(altitude: sunAltitude, rising: rising)
             sunMat.diffuse.contents = sunColor
             if glow { addSunGlow(color: sunColor) }
         } else {
