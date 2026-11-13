@@ -1,0 +1,59 @@
+name: Build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pick newest Xcode
+        run: |
+          XC=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XC"
+          xcodebuild -version
+
+      - name: Generate project
+        run: |
+          brew install xcodegen
+          xcodegen
+
+      - name: Build for iOS Simulator (no signing)
+        run: |
+          set -o pipefail
+          xcodebuild -project Murk.xcodeproj -scheme Murk \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            build 2>&1 | tee build.log
+        continue-on-error: true
+        id: build
+
+      - name: Report compiler errors
+        if: always()
+        run: |
+          # Turn each compiler error into an annotation (file:line: error: msg)
+          grep -E "^/.+:[0-9]+:[0-9]+: error: " build.log | sort -u | head -60 | while IFS= read -r line; do
+            f=$(echo "$line" | cut -d: -f1 | sed "s|$GITHUB_WORKSPACE/||")
+            l=$(echo "$line" | cut -d: -f2)
+            m=$(echo "$line" | cut -d: -f5- | sed 's/^ *//')
+            echo "::error file=$f,line=$l::$m"
+          done
+          grep -E "error:|BUILD (SUCCEEDED|FAILED)" build.log | sort -u | tail -80 > errors.txt || true
+          cat errors.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-log
+          path: |
+            build.log
+            errors.txt
+
+      - name: Fail if build failed
+        if: steps.build.outcome == 'failure'
+        run: exit 1
