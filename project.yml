@@ -66,3 +66,14 @@ targets:
         PRODUCT_NAME: MurkWidget
         TARGETED_DEVICE_FAMILY: "1"
         SKIP_INSTALL: YES
+
+schemes:
+  Murk:
+    build:
+      targets:
+        Murk: all
+        MurkWidget: all
+    run:
+      config: Debug
+    archive:
+      config: Release
