@@ -68,6 +68,7 @@ final class WeatherScene: NSObject {
     private let root = SCNNode()
     private let cloudNode = SCNNode()
     private let orbNode = SCNNode()
+    private let starNode = SCNNode()
     private let precipNode = SCNNode()
     private let moonLight = SCNNode()
     private let keyLight = SCNNode()
@@ -108,6 +109,9 @@ final class WeatherScene: NSObject {
         root.addChildNode(cloudNode)
         root.addChildNode(orbNode)
         root.addChildNode(precipNode)
+        starNode.geometry = Self.makeStars()
+        starNode.isHidden = true
+        scene.rootNode.addChildNode(starNode)
         precipNode.position = SCNVector3(0, 0.9, 0)
         orbNode.position = SCNVector3(1.15, 2.45, -1.6)
 
@@ -160,6 +164,9 @@ final class WeatherScene: NSObject {
             buildOrb(isDay: c.isDay, moonAge: c.moonAge, sunAltitude: c.sunAltitude, skin: c.skin)
             applyTimeOfDay(c.isDay ? c.sunAltitude : min(c.sunAltitude, -8))
         }
+        if force || p?.isDay != c.isDay || p?.cover != c.cover || p?.precip != c.precip {
+            showStars(!c.isDay, cover: c.cover, precip: c.precip != .none)
+        }
         if force || p?.windSpeed != c.windSpeed || p?.windDirection != c.windDirection || p?.precip != c.precip || p?.intensity != c.intensity {
             applyWind(speed: c.windSpeed, from: c.windDirection)
         }
@@ -175,6 +182,7 @@ final class WeatherScene: NSObject {
         cloudMat.diffuse.contents = UIColor(hex: skin.cloudHex).blended(toward: .white, by: 0.28)
         digitNode?.removeFromParentNode(); digitNode = nil
         precipNode.removeAllParticleSystems()
+        starNode.isHidden = true
         buildClouds(cover: cover, animated: false)
         buildOrb(isDay: isDay, moonAge: moonAge, sunAltitude: 45, skin: skin)
         scene.background.contents = UIColor(red: 0, green: 1, blue: 0, alpha: 1)   // chroma key: nothing in the sky is green
@@ -214,20 +222,76 @@ final class WeatherScene: NSObject {
 
     // MARK: Atmosphere
 
-    /// Warm light at dawn/dusk, white at midday, cool and dim at night.
+    /// Warm light at dawn/dusk, white at midday; at night a soft blue fill plus
+    /// silver moonlight from behind the clouds, so their edges glow.
     private func applyTimeOfDay(_ alt: Double) {
+        let night = alt < -4
         let key: (UIColor, CGFloat), amb: (UIColor, CGFloat)
         switch alt {
-        case ..<(-4):  key = (UIColor(red: 0.55, green: 0.65, blue: 0.95, alpha: 1), 420); amb = (UIColor(red: 0.6, green: 0.7, blue: 1, alpha: 1), 110)
+        case ..<(-4):  key = (UIColor(red: 0.62, green: 0.72, blue: 1.0, alpha: 1), 700); amb = (UIColor(red: 0.62, green: 0.72, blue: 1, alpha: 1), 240)
         case ..<4:     key = (UIColor(red: 1.0, green: 0.55, blue: 0.38, alpha: 1), 820); amb = (UIColor(red: 0.9, green: 0.7, blue: 0.75, alpha: 1), 130)
         case ..<15:    key = (UIColor(red: 1.0, green: 0.8, blue: 0.58, alpha: 1), 1000); amb = (UIColor(red: 1, green: 0.92, blue: 0.85, alpha: 1), 140)
         default:       key = (.white, 1150); amb = (.white, 150)
         }
+        // Moonlight comes from where the moon sits (up and behind); by day the rim light is back in its usual spot.
+        let rimAt = night ? SCNVector3(4.6, 8.5, -7.5) : SCNVector3(4, 3, -7)
         SCNTransaction.begin(); SCNTransaction.animationDuration = 1.2
         keyLight.light?.color = key.0; keyLight.light?.intensity = key.1
         ambLight.light?.color = amb.0; ambLight.light?.intensity = amb.1
-        rimLight.light?.color = key.0
+        rimLight.light?.color = night ? UIColor(red: 0.86, green: 0.91, blue: 1, alpha: 1) : key.0
+        rimLight.light?.intensity = night ? 1700 : 480
+        rimLight.position = rimAt
+        rimLight.look(at: SCNVector3Zero)
+        // A faint blue glow keeps dark skins readable at night.
+        cloudMat.emission.contents = night ? UIColor(red: 0.09, green: 0.12, blue: 0.22, alpha: 1) : UIColor.black
+        digitMat.emission.contents = night ? UIColor(red: 0.06, green: 0.08, blue: 0.16, alpha: 1) : UIColor.black
         SCNTransaction.commit()
+    }
+
+    /// Stars all around the scene; clouds and rain thin them out.
+    private func showStars(_ on: Bool, cover: Double, precip: Bool) {
+        let target: CGFloat = on ? CGFloat(max(0.18, 1 - cover * 0.85) * (precip ? 0.4 : 1)) : 0
+        if on { starNode.isHidden = false }
+        starNode.removeAction(forKey: "fade")
+        starNode.runAction(.sequence([.fadeOpacity(to: target, duration: 1.0),
+                                      .run { n in if target == 0 { n.isHidden = true } }]), forKey: "fade")
+    }
+
+    /// ~900 points on a big sphere, with varied brightness and a gentle twinkle.
+    private static func makeStars() -> SCNGeometry {
+        var verts: [SCNVector3] = [], colors: [SIMD4<Float>] = []
+        for _ in 0..<900 {
+            // Uniform on a sphere.
+            let z = Float.random(in: -1...1), t = Float.random(in: 0..<(2 * .pi))
+            let r = (1 - z * z).squareRoot()
+            verts.append(SCNVector3(r * cos(t) * 32, z * 32, r * sin(t) * 32))
+            let b = pow(Float.random(in: 0.15...1), 2.2)
+            let warm = Float.random(in: 0...1)
+            colors.append(SIMD4(b * (0.85 + 0.15 * warm), b * 0.92, b * (1.0 - 0.15 * warm), 1))
+        }
+        let vsrc = SCNGeometrySource(vertices: verts)
+        let cdata = colors.withUnsafeBufferPointer { Data(buffer: $0) }
+        let csrc = SCNGeometrySource(data: cdata, semantic: .color, vectorCount: colors.count,
+                                     usesFloatComponents: true, componentsPerVector: 4,
+                                     bytesPerComponent: MemoryLayout<Float>.size, dataOffset: 0,
+                                     dataStride: MemoryLayout<SIMD4<Float>>.stride)
+        let el = SCNGeometryElement(indices: Array(0..<Int32(verts.count)), primitiveType: .point)
+        el.pointSize = 3
+        el.minimumPointScreenSpaceRadius = 0.8
+        el.maximumPointScreenSpaceRadius = 2.6
+        let g = SCNGeometry(sources: [vsrc, csrc], elements: [el])
+        let m = SCNMaterial()
+        m.lightingModel = .constant
+        m.diffuse.contents = UIColor.white
+        m.writesToDepthBuffer = false
+        m.blendMode = .add
+        m.shaderModifiers = [.fragment: """
+        #pragma body
+        float ph = fract(_surface.diffuse.r * 91.7 + _surface.diffuse.b * 37.3) * 6.2831;
+        _output.color.rgb *= 0.65 + 0.35 * sin(scn_frame.time * 1.7 + ph);
+        """]
+        g.materials = [m]
+        return g
     }
 
     /// Clouds drift and rain slants with the wind.

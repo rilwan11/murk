@@ -81,12 +81,34 @@ struct NowView: View {
             footer
         }
         .padding(.bottom, 30)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            if config?.isDay == false && !skin.isLight { nightSky.transition(.opacity) }
+        }
+        .animation(.easeInOut(duration: 0.8), value: config?.isDay)
         .animation(.easeInOut(duration: 0.3), value: state.minimal)
         .onChange(of: state.forecast?.place.id) { _, _ in selectedDay = 0; hour = nil }
         .onChange(of: selectedDay) { _, d in if d > 0 { hour = nil } }
         .onChange(of: hour) { _, h in if h != nil { selectedDay = 0 } }
         .onChange(of: soundKey) { _, _ in updateSound(config) }
         .onAppear { updateSound(config) }
+    }
+
+    // MARK: Night sky
+
+    /// Deep navy fading down to a faint glow on the horizon, behind the 3D scene at night.
+    private var nightSky: some View {
+        ZStack {
+            LinearGradient(stops: [
+                .init(color: Color(hex: 0x070D22), location: 0),
+                .init(color: Color(hex: 0x0E1A3C), location: 0.45),
+                .init(color: Color(hex: 0x1C2A55), location: 0.78),
+                .init(color: Color(hex: 0x2B3460), location: 1),
+            ], startPoint: .top, endPoint: .bottom)
+            RadialGradient(colors: [Color(hex: 0x4A4E7A).opacity(0.55), .clear],
+                           center: .bottom, startRadius: 0, endRadius: 420)
+        }
+        .ignoresSafeArea()
     }
 
     // MARK: Pieces
