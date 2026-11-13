@@ -129,6 +129,8 @@ final class AppState: ObservableObject {
         SharedStore.unit = unit
         SharedStore.skin = skin
         WidgetCenter.shared.reloadAllTimelines()
+        let s = skin
+        DispatchQueue.main.async { SceneSnapshotter.renderIfNeeded(skin: s) }
     }
 
     /// A short, readable reason for a failed load, shown under the scene.

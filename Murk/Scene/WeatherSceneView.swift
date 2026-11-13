@@ -1,6 +1,7 @@
 import SwiftUI
 import SceneKit
 import UIKit
+import Metal
 
 /// Everything the 3D scene needs to know. When a field changes, only that part rebuilds.
 struct SceneConfig: Equatable {
@@ -139,6 +140,23 @@ final class WeatherScene: NSObject {
         last = c
     }
 
+    /// Renders just the sky (clouds + sun or moon, no digits or rain) to a still image, for widgets.
+    func snapshot(cover: Double, isDay: Bool, moonAge: Double, skin: Skin, size: CGSize) -> UIImage? {
+        applySkin(skin)
+        digitNode?.removeFromParentNode(); digitNode = nil
+        precipNode.removeAllParticleSystems()
+        buildClouds(cover: cover, animated: false)
+        buildOrb(isDay: isDay, moonAge: moonAge)
+        scene.background.contents = UIColor(hex: skin.bgHex)
+        cameraNode.position = SCNVector3(0, 2.0, 8.0)
+        cameraNode.orientation = SCNQuaternion(0, 0, 0, 1)
+        guard let device = MTLCreateSystemDefaultDevice() else { return nil }
+        let r = SCNRenderer(device: device, options: nil)
+        r.scene = scene
+        r.pointOfView = cameraNode
+        return r.snapshot(atTime: 0, with: size, antialiasingMode: .multisampling4X)
+    }
+
     @objc func tapped() {
         if let c = last { buildClouds(cover: c.cover) }
     }
@@ -197,7 +215,7 @@ final class WeatherScene: NSObject {
         digitNode = node
     }
 
-    private func buildClouds(cover: Double) {
+    private func buildClouds(cover: Double, animated: Bool = true) {
         cloudNode.childNodes.forEach { $0.removeFromParentNode() }
         var puffs: [(SCNVector3, CGFloat)] = []
         let count = max(3, Int((cover * 21).rounded()))
@@ -220,6 +238,7 @@ final class WeatherScene: NSObject {
             sphere.materials = [cloudMat]
             let n = SCNNode(geometry: sphere)
             n.position = puff.0
+            guard animated else { cloudNode.addChildNode(n); continue }
             n.scale = SCNVector3(0.001, 0.001, 0.001)
 
             let grow = SCNAction.scale(to: 1, duration: 0.5)

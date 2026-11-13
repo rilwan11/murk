@@ -78,7 +78,7 @@ struct WidgetView: View {
             }
         }
         .containerBackground(for: .widget) {
-            RadialGradient(colors: [entry.skin.bg.opacity(0.85), entry.skin.bg], center: .topLeading, startRadius: 0, endRadius: 300)
+            entry.skin.bg
         }
         .widgetURL(URL(string: "murk://now"))
     }
@@ -90,49 +90,134 @@ private extension Font {
     static func bigTemp(_ size: CGFloat) -> Font { .system(size: size, weight: .black).width(.compressed) }
 }
 
+/// The temperature as a sculpted, extruded slab — stacked offset layers for depth,
+/// a lit gradient face and a faint highlight edge, like the 3D digits in the app.
+struct ExtrudedText: View {
+    let text: String
+    let size: CGFloat
+    let skin: Skin
+
+    var body: some View {
+        let f = Font.bigTemp(size)
+        let face = Color(hex: skin.digitHex)
+        let depth = 9
+        ZStack {
+            ForEach(0..<depth, id: \.self) { i in
+                let k = CGFloat(depth - i)
+                Text(text).font(f)
+                    .foregroundStyle(Color.black.opacity(0.55 + 0.04 * Double(i)))
+                    .offset(x: k * size * 0.006, y: k * size * 0.010)
+            }
+            Text(text).font(f)
+                .foregroundStyle(LinearGradient(colors: [face.mix(white: 0.30), face.mix(white: 0.06), face, face.mix(white: 0.18)],
+                                                startPoint: .topLeading, endPoint: .bottomTrailing))
+            Text(text).font(f)
+                .foregroundStyle(LinearGradient(colors: [.white.opacity(0.35), .clear], startPoint: .top, endPoint: .center))
+                .mask(Text(text).font(f).offset(y: size * 0.012))
+                .blendMode(.plusLighter)
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.5)
+    }
+}
+
+/// The 3D sky rendered by the app (clouds + sun or tonight's moon), with rain or snow streaks.
+struct Sky3D: View {
+    let code: Int
+    let isDay: Bool
+    let skin: Skin
+
+    var body: some View {
+        let kind = ArtKind(code: code)
+        ZStack {
+            if let ui = WidgetArt.image(kind, day: isDay, skin: skin) {
+                Image(uiImage: ui).resizable().scaledToFit()
+            } else {
+                CloudArt(cover: kind.cover, isDay: isDay, skin: skin).padding(10)
+            }
+            if kind == .rain || kind == .snow {
+                Canvas { ctx, size in
+                    var rng = SeededRandom(seed: 7)
+                    let snow = kind == .snow
+                    for _ in 0..<(snow ? 26 : 38) {
+                        let x = CGFloat(rng.next()) * size.width * 0.8 + size.width * 0.1
+                        let y = size.height * (0.62 + CGFloat(rng.next()) * 0.38)
+                        if snow {
+                            ctx.fill(Path(ellipseIn: CGRect(x: x, y: y, width: 3, height: 3)), with: .color(.white.opacity(0.85)))
+                        } else {
+                            var p = Path(); p.move(to: CGPoint(x: x, y: y)); p.addLine(to: CGPoint(x: x - 1.5, y: y + 9))
+                            ctx.stroke(p, with: .color(skin.rain.opacity(0.9)), style: StrokeStyle(lineWidth: 1.4, lineCap: .round))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct SeededRandom {
+    private var s: UInt64
+    init(seed: UInt64) { s = seed &* 6364136223846793005 &+ 1442695040888963407 }
+    mutating func next() -> Double {
+        s = s &* 6364136223846793005 &+ 1442695040888963407
+        return Double((s >> 33) & 0xFFFFFF) / Double(0xFFFFFF)
+    }
+}
+
+/// Cloud above, sculpted temperature tucked underneath — the app's main screen in miniature.
+struct HeroStack: View {
+    let f: Forecast, u: TempUnit, skin: Skin
+    var skySize: CGFloat
+    var tempSize: CGFloat
+
+    var body: some View {
+        VStack(spacing: -tempSize * 0.32) {
+            Sky3D(code: f.current.code, isDay: f.current.isDay, skin: skin)
+                .frame(width: skySize, height: skySize * 0.62)
+                .clipped()
+                .zIndex(1)
+            ExtrudedText(text: "\(u.temp(f.current.temperature))", size: tempSize, skin: skin)
+        }
+    }
+}
+
 struct SmallView: View {
     let f: Forecast, u: TempUnit, skin: Skin
     var body: some View {
-        let today = f.daily.first
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 4) {
-                if f.place.isCurrentLocation { Image(systemName: "location.fill").font(.system(size: 9, weight: .bold)) }
-                Text(f.place.name).font(.system(size: 13, weight: .heavy)).lineLimit(1)
+        ZStack(alignment: .topLeading) {
+            HeroStack(f: f, u: u, skin: skin, skySize: 150, tempSize: 80)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .offset(y: 4)
+            HStack(spacing: 3) {
+                if f.place.isCurrentLocation { Image(systemName: "location.fill").font(.system(size: 8, weight: .bold)) }
+                Text(f.place.name).font(.system(size: 12, weight: .heavy)).lineLimit(1)
             }
-            Spacer(minLength: 0)
-            HStack(alignment: .bottom) {
-                Text("\(u.temp(f.current.temperature))").font(.bigTemp(62)).minimumScaleFactor(0.6)
-                Spacer(minLength: 0)
-                CloudArt(cover: f.current.condition.cloudCover, isDay: f.current.isDay, skin: skin)
-                    .frame(width: 58, height: 50).padding(.bottom, 10)
-            }
-            Text(f.current.condition.title).font(.system(size: 12, weight: .bold)).lineLimit(1)
-            if let today {
-                Text("H \(u.temp(today.high))  L \(u.temp(today.low))")
-                    .font(.system(size: 11, weight: .medium, design: .monospaced)).foregroundStyle(skin.muted)
-            }
+            .foregroundStyle(skin.ink)
         }
-        .foregroundStyle(skin.ink)
     }
 }
 
 struct MediumView: View {
     let f: Forecast, u: TempUnit, skin: Skin
     var body: some View {
-        HStack(spacing: 14) {
-            SmallView(f: f, u: u, skin: skin).frame(maxWidth: 130)
-            HStack(spacing: 0) {
-                ForEach(Array(f.daily.dropFirst().prefix(5).enumerated()), id: \.offset) { _, d in
-                    VStack(spacing: 5) {
-                        Text(weekday(d.date, f.timeZone)).font(.system(size: 10, design: .monospaced)).foregroundStyle(skin.muted)
-                        WidgetDayIcon(condition: d.condition, skin: skin)
-                        Text("\(u.temp(d.high))").font(.system(size: 15, weight: .heavy))
-                        Text("\(u.temp(d.low))").font(.system(size: 15, weight: .heavy)).foregroundStyle(skin.muted)
+        HStack(spacing: 10) {
+            SmallView(f: f, u: u, skin: skin).frame(width: 140)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(f.current.condition.title).font(.system(size: 15, weight: .black)).lineLimit(1)
+                    .foregroundStyle(skin.ink)
+                HStack(spacing: 0) {
+                    ForEach(Array(f.daily.dropFirst().prefix(5).enumerated()), id: \.offset) { _, d in
+                        VStack(spacing: 4) {
+                            Text(weekday(d.date, f.timeZone)).font(.system(size: 9, design: .monospaced)).foregroundStyle(skin.muted)
+                            WidgetDayIcon(condition: d.condition, skin: skin)
+                            Text("\(u.temp(d.high))").font(.system(size: 14, weight: .heavy))
+                            Text("\(u.temp(d.low))").font(.system(size: 14, weight: .heavy)).foregroundStyle(skin.muted)
+                        }
+                        .frame(maxWidth: .infinity)
                     }
-                    .frame(maxWidth: .infinity)
                 }
+                .foregroundStyle(skin.ink)
             }
-            .foregroundStyle(skin.ink)
         }
     }
 }
@@ -140,31 +225,23 @@ struct MediumView: View {
 struct LargeView: View {
     let f: Forecast, u: TempUnit, skin: Skin
     var body: some View {
-        let days = Array(f.daily.prefix(7))
+        let days = Array(f.daily.prefix(5))
         let lo = days.map(\.low).min() ?? 0, hi = days.map(\.high).max() ?? 1
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        if f.place.isCurrentLocation { Image(systemName: "location.fill").font(.system(size: 10, weight: .bold)) }
-                        Text(f.place.name).font(.system(size: 16, weight: .heavy)).lineLimit(1)
-                    }
-                    Text("\(u.temp(f.current.temperature))").font(.bigTemp(84))
-                    Text(f.current.condition.title).font(.system(size: 15, weight: .bold))
-                }
-                Spacer()
-                CloudArt(cover: f.current.condition.cloudCover, isDay: f.current.isDay, skin: skin)
-                    .frame(width: 130, height: 110)
+        VStack(spacing: 6) {
+            HStack(spacing: 4) {
+                if f.place.isCurrentLocation { Image(systemName: "location.fill").font(.system(size: 10, weight: .bold)) }
+                Text(f.place.name).font(.system(size: 16, weight: .heavy)).lineLimit(1)
             }
+            .foregroundStyle(skin.ink)
+            HeroStack(f: f, u: u, skin: skin, skySize: 230, tempSize: 118)
+                .frame(height: 190)
+            Text(f.current.condition.title).font(.system(size: 18, weight: .black)).foregroundStyle(skin.ink)
             Spacer(minLength: 0)
             ForEach(Array(days.enumerated()), id: \.offset) { i, d in
                 HStack(spacing: 10) {
                     Text(i == 0 ? "TODAY" : weekday(d.date, f.timeZone))
                         .font(.system(size: 11, design: .monospaced)).frame(width: 44, alignment: .leading)
                     WidgetDayIcon(condition: d.condition, skin: skin).frame(width: 24)
-                    Text(d.precipChance >= 20 ? "\(d.precipChance)%" : "")
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced)).foregroundStyle(skin.rain)
-                        .frame(width: 30, alignment: .leading)
                     Text("\(u.temp(d.low))").font(.system(size: 13, weight: .heavy)).foregroundStyle(skin.muted).frame(width: 26, alignment: .trailing)
                     GeometryReader { g in
                         let x0 = (d.low - lo) / max(hi - lo, 1), x1 = (d.high - lo) / max(hi - lo, 1)
@@ -177,10 +254,10 @@ struct LargeView: View {
                     }
                     Text("\(u.temp(d.high))").font(.system(size: 13, weight: .heavy)).frame(width: 26, alignment: .trailing)
                 }
-                .frame(height: 22)
+                .foregroundStyle(skin.ink)
+                .frame(height: 20)
             }
         }
-        .foregroundStyle(skin.ink)
     }
 }
 
