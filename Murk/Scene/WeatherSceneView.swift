@@ -69,12 +69,12 @@ final class WeatherScene: NSObject {
     private let moonMat = SCNMaterial()
     private let sunMat = SCNMaterial()
 
-    /// Fine film grain, like a matte print.
+    /// A barely-there matte texture (strong grain reads as noise on a phone screen).
     private static let grain = """
     #pragma body
-    float2 gp = floor(_surface.diffuseTexcoord * 1400.0);
+    float2 gp = floor(_surface.diffuseTexcoord * 2400.0);
     float gn = fract(sin(dot(gp, float2(12.9898, 78.233))) * 43758.5453);
-    _output.color.rgb += (gn - 0.5) * 0.07;
+    _output.color.rgb += (gn - 0.5) * 0.012;
     """
 
     override init() {
