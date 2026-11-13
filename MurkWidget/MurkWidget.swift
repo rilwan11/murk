@@ -106,7 +106,7 @@ struct ExtrudedText: View {
         }
     }
 
-    private var sculpted: some View {
+    @ViewBuilder private var sculpted: some View {
         let f = Font.bigTemp(size)
         let face = Color(hex: skin.digitHex)
         let depth = 9
@@ -167,7 +167,7 @@ struct Sky3D: View {
 @ViewBuilder
 private func skyImage(_ ui: UIImage) -> some View {
     if #available(iOS 18.0, *) {
-        Image(uiImage: ui).widgetAccentedRenderingMode(.fullColor).resizable().scaledToFit()
+        Image(uiImage: ui).resizable().widgetAccentedRenderingMode(.fullColor).scaledToFit()
     } else {
         Image(uiImage: ui).resizable().scaledToFit()
     }
