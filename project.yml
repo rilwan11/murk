@@ -1,0 +1,67 @@
+name: Murk
+options:
+  bundleIdPrefix: com.example
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+targets:
+  Murk:
+    type: application
+    platform: iOS
+    sources:
+      - Murk
+      - Shared
+    dependencies:
+      - target: MurkWidget
+    entitlements:
+      path: Murk/Murk.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.example.murk
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.murk
+        PRODUCT_NAME: Murk
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Murk
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Murk uses your location to show the weather where you are."
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIUserInterfaceStyle: Dark
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+
+  MurkWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - MurkWidget
+      - Shared
+      - Murk/Models
+      - Murk/Theme
+      - Murk/Services/WeatherService.swift
+      - Murk/Services/Astronomy.swift
+    entitlements:
+      path: MurkWidget/MurkWidget.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.com.example.murk
+    info:
+      path: MurkWidget/Info.plist
+      properties:
+        CFBundleDisplayName: Murk
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.murk.widget
+        PRODUCT_NAME: MurkWidget
+        TARGETED_DEVICE_FAMILY: "1"
+        SKIP_INSTALL: YES
