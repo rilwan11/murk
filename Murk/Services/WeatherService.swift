@@ -15,22 +15,64 @@ struct WeatherService {
     }
     private struct OMError: Decodable { let reason: String? }
 
+    /// Fetches a fresh forecast. Times out quickly and retries with a lighter request,
+    /// so a slow network never leaves the app spinning. Successful responses are cached.
     func forecast(for place: Place) async throws -> Forecast {
+        var data: Data
+        do {
+            data = try await fetch(place, light: false, timeout: 12)
+        } catch let e as URLError where [.timedOut, .networkConnectionLost, .cannotConnectToHost, .notConnectedToInternet].contains(e.code) {
+            try Task.checkCancellation()
+            data = try await fetch(place, light: true, timeout: 20)
+        }
+        var f = try parse(data, place: place, fetchedAt: Date())
+        try? data.write(to: Self.cacheURL(place), options: .atomic)
+        async let aqiTask = try? airQuality(for: place)
+        async let alertTask = try? self.alerts(for: place)
+        f.aqi = await aqiTask
+        f.alerts = await alertTask ?? []
+        return f
+    }
+
+    /// The last forecast saved for this place, shown instantly while a fresh one loads.
+    static func cached(for place: Place) -> Forecast? {
+        let url = cacheURL(place)
+        guard let data = try? Data(contentsOf: url),
+              let date = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date,
+              Date().timeIntervalSince(date) < 60 * 60 * 24 * 2 else { return nil }
+        return try? WeatherService().parse(data, place: place, fetchedAt: date)
+    }
+
+    private static func cacheURL(_ place: Place) -> URL {
+        let dir = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        let key = String(format: "%.3f_%.3f", place.latitude, place.longitude)
+        return dir.appendingPathComponent("forecast_\(key).json")
+    }
+
+    private func fetch(_ place: Place, light: Bool, timeout: TimeInterval) async throws -> Data {
         var c = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
-        c.queryItems = [
-            .init(name: "latitude", value: String(place.latitude)),
-            .init(name: "longitude", value: String(place.longitude)),
+        var items: [URLQueryItem] = [
+            .init(name: "latitude", value: String(format: "%.4f", place.latitude)),
+            .init(name: "longitude", value: String(format: "%.4f", place.longitude)),
             .init(name: "current", value: "temperature_2m,apparent_temperature,weather_code,is_day,precipitation,wind_speed_10m,wind_gusts_10m,wind_direction_10m,relative_humidity_2m,surface_pressure,visibility,uv_index"),
             .init(name: "hourly", value: "temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,is_day,wind_speed_10m,wind_direction_10m"),
-            .init(name: "minutely_15", value: "precipitation"),
-            .init(name: "forecast_minutely_15", value: "12"),
             .init(name: "daily", value: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,sunrise,sunset,uv_index_max,wind_speed_10m_max,wind_gusts_10m_max"),
             .init(name: "timezone", value: "auto"),
             .init(name: "forecast_days", value: "8"),
         ]
-        let (data, resp) = try await URLSession.shared.data(from: c.url!)
+        if !light {
+            items += [.init(name: "minutely_15", value: "precipitation"), .init(name: "forecast_minutely_15", value: "12")]
+        }
+        c.queryItems = items
+        var req = URLRequest(url: c.url!)
+        req.timeoutInterval = timeout
+        let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
         guard code == 200 else { throw ServiceError.server(code, (try? JSONDecoder().decode(OMError.self, from: data))?.reason) }
+        return data
+    }
+
+    func parse(_ data: Data, place: Place, fetchedAt: Date) throws -> Forecast {
         let om = try JSONDecoder().decode(OMResponse.self, from: data)
 
         let tz = TimeZone(identifier: om.timezone) ?? TimeZone(secondsFromGMT: om.utc_offset_seconds) ?? .current
@@ -88,12 +130,8 @@ struct WeatherService {
             }
         }
 
-        async let aqiTask = try? airQuality(for: place)
-        async let alertTask = try? self.alerts(for: place)
-        let aqi = await aqiTask
-        let activeAlerts = await alertTask ?? []
         return Forecast(place: place, current: current, daily: days, hourly: hours, minutely: minutes,
-                        alerts: activeAlerts, aqi: aqi, timeZone: tz, fetchedAt: Date())
+                        alerts: [], aqi: nil, timeZone: tz, fetchedAt: fetchedAt)
     }
 
     /// Active alerts from the US National Weather Service (empty outside the US).
@@ -124,7 +162,9 @@ struct WeatherService {
             .init(name: "longitude", value: String(place.longitude)),
             .init(name: "current", value: "us_aqi"),
         ]
-        let (data, _) = try await URLSession.shared.data(from: c.url!)
+        var req = URLRequest(url: c.url!)
+        req.timeoutInterval = 8
+        let (data, _) = try await URLSession.shared.data(for: req)
         let r = try JSONDecoder().decode(AQResponse.self, from: data)
         return r.current?.us_aqi.map { Int($0.rounded()) }
     }

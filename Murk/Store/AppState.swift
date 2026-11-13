@@ -134,6 +134,10 @@ final class AppState: ObservableObject {
     func load(force: Bool = false) async {
         guard let place = activePlace ?? places.first else { return }
         if !force, let f = forecast, f.place.id == place.id, Date().timeIntervalSince(f.fetchedAt) < 600 { return }
+        if forecast?.place.id != place.id, let cached = WeatherService.cached(for: place) {
+            forecast = cached          // show the last known weather right away
+            resolveAutoSkin()
+        }
         isLoading = true
         defer { isLoading = false }
         do {
