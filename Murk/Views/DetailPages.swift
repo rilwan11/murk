@@ -460,9 +460,13 @@ struct MoonView: View {
             DetailScroll {
                 ZStack {
                     // Glow only as bright as the lit part.
-                    Circle().fill(RadialGradient(colors: [state.skin.moon.opacity(0.10 + 0.25 * k), .clear], center: .center, startRadius: 90, endRadius: 170))
-                        .frame(width: 340, height: 340)
-                    MoonOrbView(age: age, tint: state.skin.moonHex)
+                    if sky?.bright != true {
+                        Circle().fill(RadialGradient(colors: [state.skin.moon.opacity(0.10 + 0.25 * k), .clear], center: .center, startRadius: 90, endRadius: 170))
+                            .frame(width: 340, height: 340)
+                    }
+                    // By day the sky behind the moon sits about a third of the way down the gradient.
+                    MoonOrbView(age: age, tint: state.skin.moonHex,
+                                daySky: sky.flatMap { $0.bright ? Sky.lerp($0.top, $0.mid, 0.45) : nil })
                         .frame(width: 280, height: 280)
                         .noPageSwipe(page: 4)
                 }
@@ -487,7 +491,7 @@ struct MoonView: View {
                                     .lineLimit(1).minimumScaleFactor(0.7)
                                 Image(uiImage: MoonImage.image(age: a, points: 30, tint: state.skin.moonHex))
                                     .resizable().frame(width: 30, height: 30)
-                                    .background(Circle().fill(Color.black.opacity(0.35)).padding(-1))
+                                    .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
                                 Text("\(Int((Astronomy.illumination(age: a) * 100).rounded()))%").font(.mono(9)).foregroundStyle(p.muted)
                             }
                             .frame(maxWidth: .infinity)
@@ -521,17 +525,16 @@ private struct MoonMonth: View {
                         let a = Double(i) / Double(n - 1) * Astronomy.synodicMonth
                         Image(uiImage: MoonImage.image(age: a, points: 18, tint: state.skin.moonHex))
                             .resizable().frame(width: 18, height: 18)
-                            .background(Circle().fill(Color.black.opacity(0.35)))
                             .frame(maxWidth: .infinity)
                     }
                 }
                 let x = CGFloat(age / Astronomy.synodicMonth) * (w - w / CGFloat(n)) + w / CGFloat(n) / 2
-                Capsule().fill(p.ink).frame(width: 3, height: 10).offset(x: x - 1.5, y: 24)
+                Circle().stroke(p.ink, lineWidth: 2).frame(width: 24, height: 24).offset(x: x - 12, y: -3)
                 Text("TONIGHT").font(.mono(9)).foregroundStyle(p.ink)
-                    .fixedSize().offset(x: min(max(x - 22, 0), w - 44), y: 36)
+                    .fixedSize().offset(x: min(max(x - 22, 0), w - 44), y: 28)
             }
         }
-        .frame(height: 52)
-        .padding(.horizontal, 6).padding(.vertical, 6)
+        .frame(height: 44)
+        .padding(.horizontal, 6).padding(.top, 8).padding(.bottom, 4)
     }
 }

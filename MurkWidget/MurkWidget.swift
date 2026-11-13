@@ -59,11 +59,18 @@ struct MurkWeatherWidget: Widget {
 
 struct WidgetView: View {
     @Environment(\.widgetFamily) private var family
+    @Environment(\.widgetRenderingMode) private var mode
     let entry: WeatherEntry
+
+    private var isHome: Bool { [.systemSmall, .systemMedium, .systemLarge].contains(family) }
 
     var body: some View {
         // The same live sky as the app (dawn, blue day, golden hour, dusk, navy night, grey under cloud).
-        let sky = entry.forecast.flatMap { Sky.current($0, skin: entry.skin, at: entry.date) }
+        // On tinted/clear home screens iOS turns all text one color, so the sky goes deeper to keep it readable,
+        // and it's drawn as a picture, which is the one thing iOS lets keep its color there.
+        let accented = mode != .fullColor
+        let live = entry.forecast.flatMap { Sky.current($0, skin: entry.skin, at: entry.date) }
+        let sky = accented ? (live ?? Sky.at(altitude: -30, cover: 0, precip: false)).deepened() : live
         let p = Palette(skin: entry.skin, sky: sky)
         Group {
             if let f = entry.forecast {
@@ -83,6 +90,9 @@ struct WidgetView: View {
                 }
                 .foregroundStyle(p.muted)
             }
+        }
+        .background {
+            if accented, isHome, let sky { fullColorImage(sky.image()).padding(-60) }
         }
         .environment(\.widgetPalette, p)
         .environment(\.widgetSky, sky)
@@ -119,17 +129,26 @@ struct ExtrudedText: View {
     let skin: Skin
 
     var body: some View {
-        if mode == .fullColor { sculpted } else {
-            // Tinted / clear home screens recolor everything, so stacked depth layers turn into a blob.
+        if mode == .fullColor { sculpted(face: nil) } else if let img = rendered() {
+            // Tinted / clear home screens recolor every layer the same, so the sculpted digits go in as a
+            // picture: pale, lit stone on the deep sky behind.
+            fullColorImage(img).scaledToFit().frame(maxHeight: size * 1.1)
+        } else {
             Text(text).font(.bigTemp(size)).widgetAccentable()
                 .lineLimit(1).minimumScaleFactor(0.5)
         }
     }
 
-    @ViewBuilder private var sculpted: some View {
+    @MainActor private func rendered() -> UIImage? {
+        let r = ImageRenderer(content: sculpted(face: Color(hex: 0xDCE4EE)).padding(size * 0.04))
+        r.scale = 3
+        return r.uiImage
+    }
+
+    @ViewBuilder private func sculpted(face override: Color?) -> some View {
         let f = Font.bigTemp(size)
         // On a sunny sky the digits go slate, like the app's daytime look.
-        let face = (sky?.bright == true) ? Color(hex: 0x2B3F5C) : Color(hex: skin.digitHex)
+        let face = override ?? ((sky?.bright == true) ? Color(hex: 0x2B3F5C) : Color(hex: skin.digitHex))
         let shadow = (sky?.bright == true) ? 0.25 : 0.55
         let depth = 9
         ZStack {
@@ -184,6 +203,16 @@ struct Sky3D: View {
                 }
             }
         }
+    }
+}
+
+/// A picture that keeps its own colors on tinted and clear home screens.
+@ViewBuilder
+func fullColorImage(_ ui: UIImage) -> some View {
+    if #available(iOS 18.0, *) {
+        Image(uiImage: ui).resizable().widgetAccentedRenderingMode(.fullColor)
+    } else {
+        Image(uiImage: ui).resizable()
     }
 }
 

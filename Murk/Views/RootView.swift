@@ -114,6 +114,8 @@ struct PageDots: View {
                     .onTapGesture { withAnimation { page = i } }
             }
         }
+        .padding(.horizontal, 10)
+        .background(Capsule().fill(.ultraThinMaterial).opacity(page == 0 ? 0 : 1))
         .animation(.easeInOut(duration: 0.25), value: page)
     }
 }

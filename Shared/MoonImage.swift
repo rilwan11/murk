@@ -34,7 +34,9 @@ enum MoonImage {
                 let shade = 0.5 + 0.5 * max(0, d).squareRoot()
                 let k = Float(lit * shade * 1.12)
                 let a = Float(edge)
-                let r = (alb * tr * k + alb * 0.035) * a, g = (alb * tg * k + alb * 0.042) * a, b = (alb * tb * k + alb * 0.06) * a
+                // Unlit side: a soft slate with faint relief (not pure black), so small moons read on light cards too.
+                let ds = 0.16 + alb * 0.10
+                let r = (alb * tr * k + ds * 0.80 * (1 - Float(lit))) * a, g = (alb * tg * k + ds * 0.88 * (1 - Float(lit))) * a, b = (alb * tb * k + ds * 1.12 * (1 - Float(lit))) * a
                 let o = (j * px + i) * 4
                 buf[o] = UInt8(min(255, r * 255)); buf[o + 1] = UInt8(min(255, g * 255))
                 buf[o + 2] = UInt8(min(255, b * 255)); buf[o + 3] = UInt8(a * 255)

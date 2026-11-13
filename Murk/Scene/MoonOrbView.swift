@@ -5,6 +5,8 @@ import SceneKit
 struct MoonOrbView: UIViewRepresentable {
     let age: Double
     let tint: UInt32
+    /// The sky behind the moon when it's daytime (nil at night).
+    var daySky: UInt32? = nil
 
     final class Coordinator { var material = SCNMaterial(); var node = SCNNode() }
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -52,5 +54,6 @@ struct MoonOrbView: UIViewRepresentable {
     private func update(_ m: SCNMaterial) {
         MoonLook.setAge(age, on: m)
         MoonLook.setTint(UIColor(hex: tint), on: m)
+        MoonLook.setDaySky(daySky.map { UIColor(hex: $0) }, on: m)
     }
 }

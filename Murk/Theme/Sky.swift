@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The sky behind the 3D scene: it follows the sun through the day
 /// (dawn pinks, blue midday, golden afternoon, dusk violet, navy night) and greys out under cloud.
@@ -114,6 +115,31 @@ struct Palette {
             ink = skin.ink; muted = skin.muted; line = skin.line
             glass = skin.isLight ? Color.white.opacity(0.35) : Color.white.opacity(0.06)
             onInk = skin.bg; bright = skin.isLight
+        }
+    }
+}
+
+extension Sky {
+    /// A deeper version for places where the text has to stay white (tinted/clear home screens):
+    /// the same hue as the moment's sky, but dark enough under white text.
+    func deepened() -> Sky {
+        func dim(_ c: UInt32, _ k: Double) -> UInt32 { Sky.lerp(c, 0x061230, k) }
+        return Sky(top: dim(top, 0.25), mid: dim(Sky.lerp(top, mid, 0.5), 0.3), bottom: dim(Sky.lerp(mid, bottom, 0.4), 0.35),
+                   glow: glow, glowOpacity: glowOpacity * 0.6, bright: false)
+    }
+
+    /// The sky as a small gradient picture (pictures keep their color where iOS tints everything else).
+    func image(size: CGSize = CGSize(width: 120, height: 120)) -> UIImage {
+        UIGraphicsImageRenderer(size: size).image { r in
+            let cs = CGColorSpaceCreateDeviceRGB()
+            func cg(_ h: UInt32, _ a: CGFloat = 1) -> CGColor {
+                UIColor(red: CGFloat((h >> 16) & 0xFF) / 255, green: CGFloat((h >> 8) & 0xFF) / 255, blue: CGFloat(h & 0xFF) / 255, alpha: a).cgColor
+            }
+            let g = CGGradient(colorsSpace: cs, colors: [cg(top), cg(mid), cg(bottom)] as CFArray, locations: [0, 0.5, 1])!
+            r.cgContext.drawLinearGradient(g, start: .zero, end: CGPoint(x: 0, y: size.height), options: [])
+            let glowG = CGGradient(colorsSpace: cs, colors: [cg(glow, CGFloat(glowOpacity)), cg(glow, 0)] as CFArray, locations: [0, 1])!
+            let c = CGPoint(x: size.width / 2, y: size.height)
+            r.cgContext.drawRadialGradient(glowG, startCenter: c, startRadius: 0, endCenter: c, endRadius: size.height, options: [])
         }
     }
 }

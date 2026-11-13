@@ -9,6 +9,8 @@ enum MoonLook {
     #pragma arguments
     float3 moonSun;
     float3 moonTint;
+    float3 moonSky;
+    float moonDay;
     #pragma body
     float3 n = normalize(_surface.normal);
     float3 L = normalize(moonSun);
@@ -18,7 +20,11 @@ enum MoonLook {
     float3 alb = _surface.diffuse.rgb;
     float3 sunlit = alb * moonTint * lit * shade * 1.15;
     float3 earthshine = alb * float3(0.035, 0.042, 0.06);      // the faint glow on the dark part
-    _output.color = float4(sunlit + earthshine, 1.0);
+    float3 night = sunlit + earthshine;
+    // By day the unlit part takes the sky's color (it vanishes, like the real daytime moon),
+    // and the lit part is a pale, slightly blue-washed white.
+    float3 day = mix(moonSky + alb * 0.04, mix(alb * moonTint * shade * 1.05, moonSky, 0.18), lit);
+    _output.color = float4(mix(night, day, moonDay), 1.0);
     """
 
     static func configure(_ m: SCNMaterial) {
@@ -28,6 +34,7 @@ enum MoonLook {
         m.normal.intensity = 0.9
         m.shaderModifiers = [.fragment: shader]
         setTint(.white, on: m)
+        setDaySky(nil, on: m)
         setAge(Astronomy.moonAge(), on: m)
     }
 
@@ -46,5 +53,15 @@ enum MoonLook {
         var r: CGFloat = 1, g: CGFloat = 1, b: CGFloat = 1, a: CGFloat = 1
         c.getRed(&r, green: &g, blue: &b, alpha: &a)
         m.setValue(NSValue(scnVector3: SCNVector3(Float(r), Float(g), Float(b))), forKey: "moonTint")
+    }
+}
+
+extension MoonLook {
+    /// Pass the sky color behind the moon by day (nil at night).
+    static func setDaySky(_ c: UIColor?, on m: SCNMaterial) {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 1
+        c?.getRed(&r, green: &g, blue: &b, alpha: &a)
+        m.setValue(NSValue(scnVector3: SCNVector3(Float(r), Float(g), Float(b))), forKey: "moonSky")
+        m.setValue(NSNumber(value: c == nil ? 0 : 1), forKey: "moonDay")
     }
 }
