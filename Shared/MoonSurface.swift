@@ -49,23 +49,48 @@ enum MoonSurface {
         return Float(m)
     }
 
-    static let albedo: UIImage = {
-        var px = [UInt8](repeating: 255, count: w * h * 4)
+    /// Surface brightness 0...1 (equirectangular), built once.
+    static let albedoValues: [Float] = {
+        var out = [Float](repeating: 0, count: w * h)
         var rng = SeededRandom(seed: 3)
         for y in 0..<h {
             for x in 0..<w {
                 let i = y * w + x
-                let hv = height[i]
-                let m = mare(x, y)
-                var c: Float = 0.80 - 0.30 * m                     // highlands bright, maria dark
-                c += (hv - 0.5) * 0.9                             // crater floors darker, rims brighter
+                var c: Float = 0.80 - 0.30 * mare(x, y)            // highlands bright, maria dark
+                c += (height[i] - 0.5) * 0.9                      // crater floors darker, rims brighter
                 c += Float(rng.next() - 0.5) * 0.05               // fine regolith grain
-                let v = UInt8(max(0, min(1, c)) * 255)
-                px[i * 4] = v; px[i * 4 + 1] = v; px[i * 4 + 2] = UInt8(min(255, Int(v) + 4)); px[i * 4 + 3] = 255
+                out[i] = max(0, min(1, c))
             }
+        }
+        return out
+    }()
+
+    static let albedo: UIImage = {
+        var px = [UInt8](repeating: 255, count: w * h * 4)
+        for i in 0..<(w * h) {
+            let v = UInt8(albedoValues[i] * 255)
+            px[i * 4] = v; px[i * 4 + 1] = v; px[i * 4 + 2] = UInt8(min(255, Int(v) + 4)); px[i * 4 + 3] = 255
         }
         return image(px)
     }()
+
+    /// Brightness at a point on the near side, for flat renders. `lon`/`lat` in radians, 0,0 = disc center.
+    static func sample(lon: Double, lat: Double) -> Float {
+        var u = 0.4 + lon / (2 * .pi); u -= floor(u)
+        let v = min(max(0.5 - lat / .pi, 0), 0.9999)
+        let x = min(Int(u * Double(w)), w - 1), y = Int(v * Double(h))
+        // Height slope gives a little relief near the terminator.
+        return albedoValues[y * w + x]
+    }
+
+    static func slope(lon: Double, lat: Double) -> (Float, Float) {
+        var u = 0.4 + lon / (2 * .pi); u -= floor(u)
+        let v = min(max(0.5 - lat / .pi, 0), 0.9999)
+        let x = min(Int(u * Double(w)), w - 1), y = Int(v * Double(h))
+        let l = height[y * w + (x - 1 + w) % w], r = height[y * w + (x + 1) % w]
+        let up = height[max(0, y - 1) * w + x], dn = height[min(h - 1, y + 1) * w + x]
+        return (r - l, up - dn)
+    }
 
     static let normal: UIImage = {
         var px = [UInt8](repeating: 255, count: w * h * 4)

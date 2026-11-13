@@ -85,3 +85,35 @@ extension EnvironmentValues {
         set { self[SkyKey.self] = newValue }
     }
 }
+
+extension Sky {
+    /// The sky over a place right now (nil on the light skins, which keep their flat color).
+    static func current(_ f: Forecast, skin: Skin, at date: Date = Date()) -> Sky? {
+        guard !skin.isLight else { return nil }
+        let alt = Astronomy.sunAltitude(latitude: f.place.latitude, longitude: f.place.longitude, at: date)
+        let day = f.current.isDay || alt > -2
+        let c = f.current.condition
+        return Sky.at(altitude: day ? alt : min(alt, -12), cover: c.cloudCover, precip: c.precip != .none)
+    }
+}
+
+/// Text and surface colors for whatever is underneath: the live sky, or the skin's flat color.
+struct Palette {
+    let ink: Color, muted: Color, line: Color
+    /// Frosted card fill.
+    let glass: Color
+    /// Text drawn on an `ink`-filled pill.
+    let onInk: Color
+    let bright: Bool
+
+    init(skin: Skin, sky: Sky?) {
+        if let sky {
+            ink = sky.ink; muted = sky.muted; line = sky.line; glass = sky.glass
+            onInk = sky.bright ? .white : Color(hex: 0x13233D); bright = sky.bright
+        } else {
+            ink = skin.ink; muted = skin.muted; line = skin.line
+            glass = skin.isLight ? Color.white.opacity(0.35) : Color.white.opacity(0.06)
+            onInk = skin.bg; bright = skin.isLight
+        }
+    }
+}

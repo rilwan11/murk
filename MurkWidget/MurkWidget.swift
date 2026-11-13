@@ -22,9 +22,13 @@ struct Provider: TimelineProvider {
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<WeatherEntry>) -> Void) {
         Task {
-            let entry = await load()
+            let first = await load()
+            // Same forecast, but the sky behind it keeps moving through the next hour.
+            let entries = (0..<4).map { i in
+                WeatherEntry(date: first.date.addingTimeInterval(Double(i) * 15 * 60), forecast: first.forecast, unit: first.unit, skin: first.skin)
+            }
             // Refresh every 30 minutes (iOS may stretch this to save battery).
-            completion(Timeline(entries: [entry], policy: .after(Date().addingTimeInterval(30 * 60))))
+            completion(Timeline(entries: entries, policy: .after(Date().addingTimeInterval(30 * 60))))
         }
     }
 
@@ -58,12 +62,15 @@ struct WidgetView: View {
     let entry: WeatherEntry
 
     var body: some View {
+        // The same live sky as the app (dawn, blue day, golden hour, dusk, navy night, grey under cloud).
+        let sky = entry.forecast.flatMap { Sky.current($0, skin: entry.skin, at: entry.date) }
+        let p = Palette(skin: entry.skin, sky: sky)
         Group {
             if let f = entry.forecast {
                 switch family {
                 case .systemSmall: SmallView(f: f, u: entry.unit, skin: entry.skin)
                 case .systemMedium: MediumView(f: f, u: entry.unit, skin: entry.skin)
-                case .systemLarge: LargeView(f: f, u: entry.unit, skin: entry.skin)
+                case .systemLarge: LargeView(f: f, u: entry.unit, skin: entry.skin, date: entry.date)
                 case .accessoryCircular: CircularView(f: f, u: entry.unit)
                 case .accessoryRectangular: RectangularView(f: f, u: entry.unit)
                 case .accessoryInline: Text("\(entry.unit.temp(f.current.temperature))° \(f.current.condition.title)")
@@ -74,14 +81,26 @@ struct WidgetView: View {
                     Image(systemName: "icloud.slash")
                     Text("No forecast").font(.caption2)
                 }
-                .foregroundStyle(entry.skin.muted)
+                .foregroundStyle(p.muted)
             }
         }
+        .environment(\.widgetPalette, p)
+        .environment(\.widgetSky, sky)
         .containerBackground(for: .widget) {
-            entry.skin.bg
+            if let sky { SkyBackground(sky: sky) } else { entry.skin.bg }
         }
         .widgetURL(URL(string: "murk://now"))
     }
+}
+
+// MARK: - Colors
+
+private struct PaletteKey: EnvironmentKey { static let defaultValue: Palette? = nil }
+private struct WidgetSkyKey: EnvironmentKey { static let defaultValue: Sky? = nil }
+extension EnvironmentValues {
+    /// Text colors that read on whatever the widget is showing behind them.
+    var widgetPalette: Palette? { get { self[PaletteKey.self] } set { self[PaletteKey.self] = newValue } }
+    var widgetSky: Sky? { get { self[WidgetSkyKey.self] } set { self[WidgetSkyKey.self] = newValue } }
 }
 
 // MARK: - Home screen sizes
@@ -94,6 +113,7 @@ private extension Font {
 /// a lit gradient face and a faint highlight edge, like the 3D digits in the app.
 struct ExtrudedText: View {
     @Environment(\.widgetRenderingMode) private var mode
+    @Environment(\.widgetSky) private var sky
     let text: String
     let size: CGFloat
     let skin: Skin
@@ -108,13 +128,15 @@ struct ExtrudedText: View {
 
     @ViewBuilder private var sculpted: some View {
         let f = Font.bigTemp(size)
-        let face = Color(hex: skin.digitHex)
+        // On a sunny sky the digits go slate, like the app's daytime look.
+        let face = (sky?.bright == true) ? Color(hex: 0x2B3F5C) : Color(hex: skin.digitHex)
+        let shadow = (sky?.bright == true) ? 0.25 : 0.55
         let depth = 9
         ZStack {
             ForEach(0..<depth, id: \.self) { i in
                 let k = CGFloat(depth - i)
                 Text(text).font(f)
-                    .foregroundStyle(Color.black.opacity(0.55 + 0.04 * Double(i)))
+                    .foregroundStyle(Color.black.opacity(shadow + 0.04 * Double(i)))
                     .offset(x: k * size * 0.006, y: k * size * 0.010)
             }
             Text(text).font(f)
@@ -132,6 +154,7 @@ struct ExtrudedText: View {
 
 /// The 3D sky rendered by the app (clouds + sun or tonight's moon), with rain or snow streaks.
 struct Sky3D: View {
+    @Environment(\.widgetSky) private var sky
     let code: Int
     let isDay: Bool
     let skin: Skin
@@ -139,14 +162,14 @@ struct Sky3D: View {
     var body: some View {
         let kind = ArtKind(code: code)
         ZStack {
-            if let ui = WidgetArt.image(kind, day: isDay, skin: skin) {
+            if let ui = WidgetArt.image(kind, day: isDay, skin: skin) ?? WidgetArt.image(kind, day: isDay, skin: skin, legacy: true) {
                 skyImage(ui)
             } else {
-                CloudArt(cover: kind.cover, isDay: isDay, skin: skin).padding(10)
+                CloudArt(cover: kind.cover, isDay: isDay, skin: skin, sunny: sky?.bright == true).padding(10)
             }
             if kind == .rain || kind == .snow {
                 Canvas { ctx, size in
-                    var rng = SeededRandom(seed: 7)
+                    var rng = RainRandom(seed: 7)
                     let snow = kind == .snow
                     for _ in 0..<(snow ? 26 : 38) {
                         let x = CGFloat(rng.next()) * size.width * 0.8 + size.width * 0.1
@@ -174,7 +197,7 @@ private func skyImage(_ ui: UIImage) -> some View {
     }
 }
 
-struct SeededRandom {
+struct RainRandom {
     private var s: UInt64
     init(seed: UInt64) { s = seed &* 6364136223846793005 &+ 1442695040888963407 }
     mutating func next() -> Double {
@@ -185,6 +208,7 @@ struct SeededRandom {
 
 /// Cloud above, sculpted temperature tucked underneath — the app's main screen in miniature.
 struct HeroStack: View {
+    @Environment(\.widgetPalette) private var pal
     let f: Forecast, u: TempUnit, skin: Skin
     var skySize: CGFloat
     var tempSize: CGFloat
@@ -203,7 +227,7 @@ struct HeroStack: View {
             if showHiLo, let d = f.daily.first {
                 Text("H \(u.temp(d.high))°  L \(u.temp(d.low))°")
                     .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(skin.muted)
+                    .foregroundStyle(pal?.muted ?? skin.muted)
                     .widgetAccentable()
             }
         }
@@ -211,6 +235,7 @@ struct HeroStack: View {
 }
 
 struct SmallView: View {
+    @Environment(\.widgetPalette) private var pal
     let f: Forecast, u: TempUnit, skin: Skin
     var showHiLo = false
     var body: some View {
@@ -220,7 +245,7 @@ struct SmallView: View {
                 Text(f.place.name).font(.system(size: 12, weight: .heavy)).lineLimit(1)
                 Spacer(minLength: 0)
             }
-            .foregroundStyle(skin.ink)
+            .foregroundStyle(pal?.ink ?? skin.ink)
             .widgetAccentable()
             HeroStack(f: f, u: u, skin: skin, skySize: 152, tempSize: showHiLo ? 72 : 86,
                       skyRatio: showHiLo ? 0.56 : 0.62, showHiLo: showHiLo)
@@ -230,33 +255,40 @@ struct SmallView: View {
 }
 
 struct MediumView: View {
+    @Environment(\.widgetPalette) private var pal
     let f: Forecast, u: TempUnit, skin: Skin
     var body: some View {
+        let ink = pal?.ink ?? skin.ink, muted = pal?.muted ?? skin.muted
         HStack(spacing: 10) {
             SmallView(f: f, u: u, skin: skin, showHiLo: true).frame(width: 152)
             VStack(alignment: .leading, spacing: 6) {
                 Text(f.current.condition.title).font(.system(size: 15, weight: .black)).lineLimit(1)
-                    .foregroundStyle(skin.ink)
+                    .foregroundStyle(ink)
                 HStack(spacing: 0) {
                     ForEach(Array(f.daily.dropFirst().prefix(5).enumerated()), id: \.offset) { _, d in
                         VStack(spacing: 4) {
-                            Text(weekday(d.date, f.timeZone)).font(.system(size: 9, design: .monospaced)).foregroundStyle(skin.muted)
+                            Text(weekday(d.date, f.timeZone)).font(.system(size: 9, design: .monospaced)).foregroundStyle(muted)
                             WidgetDayIcon(condition: d.condition, skin: skin)
                             Text("\(u.temp(d.high))").font(.system(size: 14, weight: .heavy))
-                            Text("\(u.temp(d.low))").font(.system(size: 14, weight: .heavy)).foregroundStyle(skin.muted)
+                            Text("\(u.temp(d.low))").font(.system(size: 14, weight: .heavy)).foregroundStyle(muted)
                         }
                         .frame(maxWidth: .infinity)
                     }
                 }
-                .foregroundStyle(skin.ink)
+                .foregroundStyle(ink)
+                .padding(.vertical, 6)
+                .background(RoundedRectangle(cornerRadius: 14).fill(pal?.glass ?? .clear))
             }
         }
     }
 }
 
 struct LargeView: View {
+    @Environment(\.widgetPalette) private var pal
     let f: Forecast, u: TempUnit, skin: Skin
+    var date: Date = .now
     var body: some View {
+        let ink = pal?.ink ?? skin.ink, muted = pal?.muted ?? skin.muted, line = pal?.line ?? skin.line
         let days = Array(f.daily.prefix(5))
         let lo = days.map(\.low).min() ?? 0, hi = days.map(\.high).max() ?? 1
         VStack(spacing: 6) {
@@ -264,31 +296,36 @@ struct LargeView: View {
                 if f.place.isCurrentLocation { Image(systemName: "location.fill").font(.system(size: 10, weight: .bold)) }
                 Text(f.place.name).font(.system(size: 16, weight: .heavy)).lineLimit(1)
             }
-            .foregroundStyle(skin.ink)
-            HeroStack(f: f, u: u, skin: skin, skySize: 300, tempSize: 130, skyRatio: 0.5)
-                .frame(height: 190)
-            Text(f.current.condition.title).font(.system(size: 18, weight: .black)).foregroundStyle(skin.ink)
+            .foregroundStyle(ink)
+            HeroStack(f: f, u: u, skin: skin, skySize: 280, tempSize: 118, skyRatio: 0.5)
+                .frame(height: 165)
+            Text(f.current.condition.title).font(.system(size: 18, weight: .black)).foregroundStyle(ink)
             Spacer(minLength: 0)
+            VStack(spacing: 3) {
             ForEach(Array(days.enumerated()), id: \.offset) { i, d in
                 HStack(spacing: 10) {
                     Text(i == 0 ? "TODAY" : weekday(d.date, f.timeZone))
                         .font(.system(size: 11, design: .monospaced)).frame(width: 44, alignment: .leading)
                     WidgetDayIcon(condition: d.condition, skin: skin).frame(width: 24)
-                    Text("\(u.temp(d.low))").font(.system(size: 13, weight: .heavy)).foregroundStyle(skin.muted).frame(width: 26, alignment: .trailing)
+                    Text("\(u.temp(d.low))").font(.system(size: 13, weight: .heavy)).foregroundStyle(muted).frame(width: 26, alignment: .trailing)
                     GeometryReader { g in
                         let x0 = (d.low - lo) / max(hi - lo, 1), x1 = (d.high - lo) / max(hi - lo, 1)
                         ZStack(alignment: .leading) {
-                            Capsule().fill(skin.line).frame(height: 5)
-                            Capsule().fill(skin.ink).frame(width: max(6, g.size.width * (x1 - x0)), height: 5)
+                            Capsule().fill(line).frame(height: 5)
+                            Capsule().fill(LinearGradient(colors: [Color(hex: 0x7CC4FF), Color(hex: 0xFFC14D), Color(hex: 0xFF6B3D)], startPoint: .leading, endPoint: .trailing))
+                                .frame(width: max(6, g.size.width * (x1 - x0)), height: 5)
                                 .offset(x: g.size.width * x0)
                         }
                         .frame(maxHeight: .infinity)
                     }
                     Text("\(u.temp(d.high))").font(.system(size: 13, weight: .heavy)).frame(width: 26, alignment: .trailing)
                 }
-                .foregroundStyle(skin.ink)
-                .frame(height: 20)
+                .foregroundStyle(ink)
+                .frame(height: 19)
             }
+            }
+            .padding(.vertical, 6).padding(.horizontal, 10)
+            .background(RoundedRectangle(cornerRadius: 16).fill(pal?.glass ?? .clear))
         }
     }
 }
@@ -336,6 +373,7 @@ struct CloudArt: View {
     let cover: Double
     let isDay: Bool
     let skin: Skin
+    var sunny = false
 
     var body: some View {
         GeometryReader { g in
@@ -347,7 +385,8 @@ struct CloudArt: View {
                 ForEach(0..<count, id: \.self) { i in
                     let p = puffs[i]
                     Circle()
-                        .fill(RadialGradient(colors: [Color(hex: skin.cloudHex).opacity(1).mix(white: 0.28), Color(hex: skin.cloudHex), .black],
+                        .fill(RadialGradient(colors: sunny ? [.white, Color(hex: 0xE4E9F0), Color(hex: 0x9FB0C8)]
+                                                           : [Color(hex: skin.cloudHex).opacity(1).mix(white: 0.28), Color(hex: skin.cloudHex), .black],
                                              center: UnitPoint(x: 0.34, y: 0.26), startRadius: 0, endRadius: w * p.2 * 1.6))
                         .frame(width: w * p.2 * 2, height: w * p.2 * 2)
                         .position(x: w * p.0, y: h * p.1)
@@ -358,21 +397,24 @@ struct CloudArt: View {
 
     @ViewBuilder private var orb: some View {
         if isDay {
-            Circle().fill(skin.sun)
+            Circle().fill(RadialGradient(colors: [.white, Color(hex: 0xFFE27A), Color(hex: 0xFFB43A)], center: UnitPoint(x: 0.42, y: 0.4), startRadius: 0, endRadius: 40))
+                .shadow(color: Color(hex: 0xFFC14D).opacity(0.7), radius: 12)
         } else {
-            MoonDisc(age: Astronomy.moonAge(), lit: skin.moon, dark: .clear)
+            Image(uiImage: MoonImage.image(age: Astronomy.moonAge(), points: 80, tint: skin.moonHex)).resizable()
         }
     }
 }
 
 struct WidgetDayIcon: View {
+    @Environment(\.widgetPalette) private var pal
     let condition: Condition
     let skin: Skin
     var body: some View {
         let rainy = condition.precip == .rain
+        let ink = pal?.ink ?? skin.ink
         Image(systemName: condition.symbol)
             .symbolRenderingMode(.palette)
-            .foregroundStyle(condition.code <= 1 ? skin.sun : skin.ink, rainy ? skin.rain : (condition.code == 2 ? skin.sun : skin.ink))
+            .foregroundStyle(condition.code <= 1 ? Color(hex: 0xFFB43A) : ink, rainy ? skin.rain : (condition.code == 2 ? Color(hex: 0xFFB43A) : ink))
             .font(.system(size: 15, weight: .semibold))
             .frame(height: 18)
     }

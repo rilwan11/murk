@@ -26,15 +26,17 @@ enum ArtKind: String, CaseIterable {
 }
 
 enum WidgetArt {
-    static let version = 3
+    /// v4: the moon shows its real phase, and daytime clouds are sunlit white.
+    static let version = 4
 
-    static func url(_ kind: ArtKind, day: Bool, skin: Skin) -> URL? {
+    static func url(_ kind: ArtKind, day: Bool, skin: Skin, version v: Int = version) -> URL? {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: SharedStore.appGroup)?
-            .appendingPathComponent("art-v\(version)-\(kind.rawValue)-\(day ? "day" : "night")-\(skin.rawValue).png")
+            .appendingPathComponent("art-v\(v)-\(kind.rawValue)-\(day ? "day" : "night")-\(skin.rawValue).png")
     }
 
-    static func image(_ kind: ArtKind, day: Bool, skin: Skin) -> UIImage? {
-        guard let u = url(kind, day: day, skin: skin) else { return nil }
+    /// `legacy` reads the previous version's images until the app has rendered new ones.
+    static func image(_ kind: ArtKind, day: Bool, skin: Skin, legacy: Bool = false) -> UIImage? {
+        guard let u = url(kind, day: day, skin: skin, version: legacy ? version - 1 : version) else { return nil }
         return UIImage(contentsOfFile: u.path)
     }
 }

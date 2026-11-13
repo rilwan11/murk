@@ -65,7 +65,7 @@ struct NowView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .noPageSwipe()
+            .noPageSwipe(page: 0)
             .task { try? await Task.sleep(for: .seconds(6)); withAnimation { showHint = false } }
 
             Text(conditionTitle)
@@ -82,7 +82,7 @@ struct NowView: View {
             if !state.upcomingHours.isEmpty {
                 HourScrubber(hours: state.upcomingHours, selection: $hour)
                     .padding(.top, 10).padding(.horizontal, 22)
-                    .noPageSwipe()
+                    .noPageSwipe(page: 0)
             }
 
             if !state.minimal {
@@ -156,7 +156,7 @@ struct NowView: View {
                 withAnimation(.spring(response: 0.3)) { headerDrag = 0 }
                 if v.translation.width < -50 { state.cycleCity(1) } else if v.translation.width > 50 { state.cycleCity(-1) }
             })
-        .noPageSwipe()
+        .noPageSwipe(page: 0)
     }
 
     private var footer: some View {
@@ -449,9 +449,9 @@ struct HourScrubber: View {
 struct ForecastStrip: View {
     @EnvironmentObject var state: AppState
     @Environment(\.sky) private var sky
-    private var ink: Color { sky?.ink ?? ink }
-    private var muted: Color { sky?.muted ?? muted }
-    private var line: Color { sky?.line ?? line }
+    private var ink: Color { sky?.ink ?? state.skin.ink }
+    private var muted: Color { sky?.muted ?? state.skin.muted }
+    private var line: Color { sky?.line ?? state.skin.line }
     @Binding var selected: Int
 
     var body: some View {

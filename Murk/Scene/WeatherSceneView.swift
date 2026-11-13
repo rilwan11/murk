@@ -172,13 +172,8 @@ final class WeatherScene: NSObject {
         cloudMat.metalness.contents = 0.0
         digitMat.roughness.contents = 0.42
         digitMat.metalness.contents = 0.25
-        // Moon: cratered surface with real relief, lit by the sun so the phase shows.
-        moonMat.lightingModel = .physicallyBased
-        moonMat.diffuse.contents = MoonSurface.albedo
-        moonMat.normal.contents = MoonSurface.normal
-        moonMat.normal.intensity = 0.9
-        moonMat.roughness.contents = 0.95
-        moonMat.metalness.contents = 0.0
+        // Moon: cratered surface lit for tonight's phase (see MoonLook).
+        MoonLook.configure(moonMat)
         // Sun: glowing plasma with limb darkening (bright core, deeper-colored edge) and slow granulation.
         sunMat.lightingModel = .constant
         sunMat.shaderModifiers = [.fragment: Self.sunShader]
@@ -217,8 +212,8 @@ final class WeatherScene: NSObject {
     /// Renders just the sky (clouds + sun or moon, no digits or rain) to a still image, for widgets.
     func snapshot(cover: Double, isDay: Bool, moonAge: Double, skin: Skin, size: CGSize) -> UIImage? {
         applySkin(skin)
-        // Lighter clouds so they read on any widget background, including tinted glass.
-        cloudMat.diffuse.contents = UIColor(hex: skin.cloudHex).blended(toward: .white, by: 0.28)
+        // Lighter clouds so they read on any widget background; by day dark skins get the sunlit white clouds.
+        cloudMat.diffuse.contents = UIColor(hex: skin.cloudHex).blended(toward: .white, by: isDay && !skin.isLight ? 0.82 : 0.28)
         digitNode?.removeFromParentNode(); digitNode = nil
         precipNode.removeAllParticleSystems()
         starNode.isHidden = true
@@ -416,7 +411,7 @@ final class WeatherScene: NSObject {
     private func applySkin(_ s: Skin) {
         cloudMat.diffuse.contents = UIColor(hex: s.cloudHex)
         digitMat.diffuse.contents = UIColor(hex: s.digitHex)
-        moonMat.multiply.contents = UIColor(hex: s.moonHex)
+        MoonLook.setTint(UIColor(hex: s.moonHex), on: moonMat)
     }
 
     // MARK: Builders
@@ -556,14 +551,11 @@ final class WeatherScene: NSObject {
             sunMat.multiply.contents = sunColor
             if glow { addSunGlow(color: sunColor) }
         } else {
-            // Light the moon from where the sun really is, so the lit part matches tonight's phase.
+            // The terminator is computed in the shader from the moon's age, so the phase is always right.
             sphere.materials = [moonMat]
-            orbNode.categoryBitMask = 2
-            let th = 2 * Double.pi * moonAge / Astronomy.synodicMonth
-            let o = target
-            moonLight.position = SCNVector3(o.x + Float(sin(th)) * 10, o.y + 0.8, o.z - Float(cos(th)) * 10)
-            moonLight.look(at: o)
-            if glow { addMoonGlow() }
+            orbNode.categoryBitMask = 8      // no scene lights; MoonLook does its own lighting
+            MoonLook.setAge(moonAge, on: moonMat)
+            if glow { addMoonGlow(illumination: Astronomy.illumination(age: moonAge)) }
         }
         orbNode.geometry = sphere
         orbNode.removeAction(forKey: "spin")
@@ -606,7 +598,7 @@ extension WeatherScene {
     }
 
     /// A faint silver glow around the moon.
-    fileprivate func addMoonGlow() {
+    fileprivate func addMoonGlow(illumination k: Double) {
         let g = SCNPlane(width: 3.4, height: 3.4)
         let m = SCNMaterial()
         m.lightingModel = .constant
@@ -616,7 +608,9 @@ extension WeatherScene {
         m.writesToDepthBuffer = false
         g.materials = [m]
         let n = SCNNode(geometry: g)
-        n.opacity = 0.28
+        // Only the lit part glows, so a thin crescent gets a faint halo and a full moon a bright one.
+        n.opacity = CGFloat(0.05 + 0.27 * k)
+        n.scale = SCNVector3(0.8 + 0.2 * k, 0.8 + 0.2 * k, 1)
         n.categoryBitMask = 4
         n.constraints = [SCNBillboardConstraint()]
         orbNode.addChildNode(n)

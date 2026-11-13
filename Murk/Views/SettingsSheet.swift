@@ -132,7 +132,16 @@ struct SettingsSheet: View {
                 }
             }
             .scrollContentBackground(.hidden)
-            .background(Color(hex: 0x0B0B0B))
+            .background {
+                // A dimmed copy of the current sky, so settings feel like part of the same place.
+                ZStack {
+                    Color(hex: 0x0B0B0B)
+                    if let f = state.forecast, let sky = Sky.current(f, skin: state.skin) {
+                        SkyBackground(sky: sky).opacity(0.45)
+                    }
+                }
+                .ignoresSafeArea()
+            }
             .navigationTitle("Murk")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
