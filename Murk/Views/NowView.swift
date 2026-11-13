@@ -11,9 +11,20 @@ struct NowView: View {
     @State private var showHint = true
     @State private var headerDrag: CGFloat = 0
 
+    /// The live sky for whatever moment the scene is showing (nil on the light skins, which keep their flat color).
+    private func makeSky(for c: SceneConfig?) -> Sky? {
+        guard let c, !state.skin.isLight else { return nil }
+        return Sky.at(altitude: c.isDay ? c.sunAltitude : min(c.sunAltitude, -12),
+                      cover: c.cover, precip: c.precip != .none)
+    }
+    private var ink: Color { makeSky(for: sceneConfig)?.ink ?? state.skin.ink }
+    private var muted: Color { makeSky(for: sceneConfig)?.muted ?? state.skin.muted }
+    private var line: Color { makeSky(for: sceneConfig)?.line ?? state.skin.line }
+
     var body: some View {
         let skin = state.skin
         let config = sceneConfig
+        let sky = makeSky(for: config)
         VStack(spacing: 0) {
             header
             if let pill = state.headsUp {
@@ -23,8 +34,8 @@ struct NowView: View {
                     Text(pill).font(.mono(12)).tracking(2).lineLimit(1)
                 }
                 .padding(.horizontal, 16).padding(.vertical, 7)
-                .foregroundStyle(isAlert ? Color.white : skin.bg)
-                .background(Capsule().fill(isAlert ? Color(hex: 0xD93A2B) : skin.ink))
+                .foregroundStyle(isAlert ? Color.white : (sky == nil ? skin.bg : (sky!.bright ? Color.white : Color(hex: 0x13233D))))
+                .background(Capsule().fill(isAlert ? Color(hex: 0xD93A2B) : ink))
                 .padding(.top, 8)
                 .transition(.opacity)
             }
@@ -33,12 +44,12 @@ struct NowView: View {
                 if let config {
                     WeatherSceneView(config: config, onThunder: { SoundEngine.shared.thunder() })
                 } else {
-                    ProgressView().tint(skin.ink).frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ProgressView().tint(ink).frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 HStack {
                     Spacer()
                     Text("DRAG TO SPIN · PINCH TO ZOOM · TAP FOR NEW CLOUDS")
-                        .font(.mono(9)).tracking(1).foregroundStyle(skin.muted)
+                        .font(.mono(9)).tracking(1).foregroundStyle(muted)
                         .opacity(showHint ? 1 : 0)
                     Spacer()
                 }
@@ -47,9 +58,9 @@ struct NowView: View {
                         Image(systemName: "arrow.counterclockwise")
                             .font(.system(size: 15, weight: .semibold))
                             .frame(width: 36, height: 36)
-                            .background(Circle().stroke(skin.line))
+                            .background(Circle().stroke(line))
                     }
-                    .foregroundStyle(skin.ink)
+                    .foregroundStyle(ink)
                     .padding(.trailing, 16)
                 }
             }
@@ -62,7 +73,9 @@ struct NowView: View {
                 .minimumScaleFactor(0.6).lineLimit(1)
                 .padding(.top, 6).padding(.horizontal, 20)
             if let feels = feelsLike {
-                Text("FEELS LIKE \(feels)°").font(.mono(10)).tracking(1.5).foregroundStyle(skin.muted)
+                Text("FEELS LIKE \(feels)°").font(.mono(10)).tracking(1.5).foregroundStyle(sky == nil ? muted : ink)
+                    .padding(.horizontal, sky == nil ? 0 : 12).padding(.vertical, sky == nil ? 0 : 5)
+                    .background { if let sky { Capsule().fill(sky.glass) } }
                     .padding(.top, 2)
             }
 
@@ -74,6 +87,8 @@ struct NowView: View {
 
             if !state.minimal {
                 ForecastStrip(selected: $selectedDay)
+                    .padding(.vertical, sky == nil ? 0 : 4)
+                    .background { if let sky { RoundedRectangle(cornerRadius: 18).fill(sky.glass).padding(.horizontal, 8) } }
                     .padding(.top, 10)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
@@ -82,33 +97,18 @@ struct NowView: View {
         }
         .padding(.bottom, 30)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .foregroundStyle(ink)
+        .environment(\.sky, sky)
         .background {
-            if config?.isDay == false && !skin.isLight { nightSky.transition(.opacity) }
+            if let sky { SkyBackground(sky: sky).transition(.opacity) }
         }
-        .animation(.easeInOut(duration: 0.8), value: config?.isDay)
+        .animation(.easeInOut(duration: 0.8), value: sky)
         .animation(.easeInOut(duration: 0.3), value: state.minimal)
         .onChange(of: state.forecast?.place.id) { _, _ in selectedDay = 0; hour = nil }
         .onChange(of: selectedDay) { _, d in if d > 0 { hour = nil } }
         .onChange(of: hour) { _, h in if h != nil { selectedDay = 0 } }
         .onChange(of: soundKey) { _, _ in updateSound(config) }
         .onAppear { updateSound(config) }
-    }
-
-    // MARK: Night sky
-
-    /// Deep navy fading down to a faint glow on the horizon, behind the 3D scene at night.
-    private var nightSky: some View {
-        ZStack {
-            LinearGradient(stops: [
-                .init(color: Color(hex: 0x070D22), location: 0),
-                .init(color: Color(hex: 0x0E1A3C), location: 0.45),
-                .init(color: Color(hex: 0x1C2A55), location: 0.78),
-                .init(color: Color(hex: 0x2B3460), location: 1),
-            ], startPoint: .top, endPoint: .bottom)
-            RadialGradient(colors: [Color(hex: 0x4A4E7A).opacity(0.55), .clear],
-                           center: .bottom, startRadius: 0, endRadius: 420)
-        }
-        .ignoresSafeArea()
     }
 
     // MARK: Pieces
@@ -138,11 +138,11 @@ struct NowView: View {
                         .frame(width: 44, height: 44)
                 }
             }
-            .foregroundStyle(state.skin.ink)
+            .foregroundStyle(ink)
             if count > 1 {
                 HStack(spacing: 5) {
                     ForEach(0..<count, id: \.self) { i in
-                        Circle().fill(state.skin.ink.opacity(i == state.cityIndex ? 0.9 : 0.25)).frame(width: 5, height: 5)
+                        Circle().fill(ink.opacity(i == state.cityIndex ? 0.9 : 0.25)).frame(width: 5, height: 5)
                     }
                 }
             }
@@ -178,7 +178,7 @@ struct NowView: View {
             }
         }
         .font(.mono(9)).tracking(1.2)
-        .foregroundStyle(state.skin.muted)
+        .foregroundStyle(muted)
         .multilineTextAlignment(.center)
         .padding(.top, 12).padding(.horizontal, 20)
     }
@@ -264,45 +264,169 @@ struct NowView: View {
     }
 }
 
-/// Drag across the next 24 hours to play the weather forward.
+/// Drag across the next 24 hours to play the weather forward. The track is painted with the
+/// day's sky, carries a temperature curve with the high and low, marks sunrise and sunset,
+/// and shows a bubble with the time, temperature and weather while you drag.
 struct HourScrubber: View {
     @EnvironmentObject var state: AppState
+    @Environment(\.sky) private var sky
+    private var ink: Color { sky?.ink ?? state.skin.ink }
+    private var muted: Color { sky?.muted ?? state.skin.muted }
+    private var line: Color { sky?.line ?? state.skin.line }
     let hours: [HourlyPoint]
     @Binding var selection: Int?
+    @State private var dragging = false
+
+    private let trackH: CGFloat = 30
+    private let bubbleH: CGFloat = 30
 
     var body: some View {
         GeometryReader { g in
+            let w = g.size.width
             let n = max(1, hours.count - 1)
             let i = selection ?? 0
-            let x = g.size.width * CGFloat(i) / CGFloat(n)
-            ZStack(alignment: .leading) {
-                Capsule().fill(state.skin.line).frame(height: 6)
-                Capsule().fill(state.skin.ink.opacity(0.85)).frame(width: max(6, x), height: 6)
+            let x = w * CGFloat(i) / CGFloat(n)
+            let trackTop = bubbleH + 6
+            ZStack(alignment: .topLeading) {
+                // Track: the sky, hour by hour.
+                RoundedRectangle(cornerRadius: 9)
+                    .fill(LinearGradient(stops: skyStops(n: n), startPoint: .leading, endPoint: .trailing))
+                    .overlay(RoundedRectangle(cornerRadius: 9).stroke(line, lineWidth: 1))
+                    .overlay { curve(width: w, n: n) }
+                    .frame(width: w, height: trackH)
+                    .offset(y: trackTop)
+
+                // Sunrise / sunset markers.
+                ForEach(sunEvents(), id: \.0) { k, rise in
+                    Image(systemName: rise ? "sunrise.fill" : "sunset.fill")
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(Color(hex: 0xFFC44D), muted)
+                        .font(.system(size: 11, weight: .bold))
+                        .position(x: w * CGFloat(k) / CGFloat(n), y: trackTop + trackH + 9)
+                }
+
+                // Hour labels.
                 ForEach(Array(stride(from: 0, through: n, by: 6)), id: \.self) { k in
                     Text(k == 0 ? "NOW" : label(hours[k].time))
-                        .font(.mono(9)).foregroundStyle(state.skin.muted)
+                        .font(.mono(9)).foregroundStyle(muted)
                         .fixedSize()
-                        .position(x: g.size.width * CGFloat(k) / CGFloat(n), y: 24)
+                        .position(x: min(max(w * CGFloat(k) / CGFloat(n), 14), w - 14), y: trackTop + trackH + 22)
                         .onTapGesture { if k == 0 { withAnimation { selection = nil } } }
                 }
-                Circle().fill(state.skin.ink)
-                    .frame(width: 22, height: 22)
-                    .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
-                    .position(x: x, y: 3)
+
+                // Thumb.
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(Color.white)
+                    .overlay(RoundedRectangle(cornerRadius: 3).stroke(Color.black.opacity(0.25), lineWidth: 0.5))
+                    .frame(width: 6, height: trackH + 10)
+                    .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
+                    .position(x: min(max(x, 3), w - 3), y: trackTop + trackH / 2)
+
+                // Bubble.
+                if selection != nil || dragging, hours.indices.contains(i) {
+                    bubble(hours[i], now: i == 0)
+                        .fixedSize()
+                        .position(x: min(max(x, 70), w - 70), y: bubbleH / 2)
+                        .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .bottom)))
+                }
             }
-            .frame(height: 30, alignment: .top)
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { v in
-                    let k = Int((min(max(v.location.x, 0), g.size.width) / g.size.width * CGFloat(n)).rounded())
+                    if !dragging { withAnimation(.easeOut(duration: 0.15)) { dragging = true } }
+                    let k = Int((min(max(v.location.x, 0), w) / w * CGFloat(n)).rounded())
                     if k != (selection ?? 0) {
                         selection = k == 0 ? nil : k
-                        UISelectionFeedbackGenerator().selectionChanged()
+                        if isSunEvent(k) { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
+                        else { UISelectionFeedbackGenerator().selectionChanged() }
                     }
-                })
+                }
+                .onEnded { _ in withAnimation(.easeOut(duration: 0.3)) { dragging = false } })
         }
-        .frame(height: 34)
+        .frame(height: bubbleH + 6 + trackH + 30)
+        .animation(.easeOut(duration: 0.15), value: selection == nil)
     }
+
+    // MARK: Pieces
+
+    private func bubble(_ h: HourlyPoint, now: Bool) -> some View {
+        HStack(spacing: 6) {
+            Text(now ? "NOW" : label(h.time).uppercased()).font(.mono(11)).tracking(0.5)
+            Text("\(state.unit.temp(h.temperature))°").font(.system(size: 15, weight: .heavy))
+            Image(systemName: h.condition.symbol).symbolRenderingMode(.multicolor).font(.system(size: 14, weight: .semibold))
+            if h.precipChance >= 20 {
+                Text("\(h.precipChance)%").font(.mono(10)).foregroundStyle(Color(hex: 0x6FB3FF))
+            }
+        }
+        .foregroundStyle(sky?.bright == true ? Color(hex: 0x13233D) : .white)
+        .padding(.horizontal, 12).padding(.vertical, 6)
+        .background(Capsule().fill(sky?.bright == true ? Color.white.opacity(0.85) : Color.black.opacity(0.55)))
+        .overlay(Capsule().stroke(Color.white.opacity(0.25), lineWidth: 0.5))
+    }
+
+    /// Temperature line across the track, with the high and low marked.
+    private func curve(width w: CGFloat, n: Int) -> some View {
+        let temps = hours.map(\.temperature)
+        let lo = temps.min() ?? 0, hi = temps.max() ?? 1
+        let span = max(hi - lo, 1)
+        let pad: CGFloat = 7
+        func pt(_ k: Int) -> CGPoint {
+            CGPoint(x: w * CGFloat(k) / CGFloat(n),
+                    y: pad + (trackH - pad * 2) * CGFloat(1 - (temps[k] - lo) / span))
+        }
+        let hiK = temps.firstIndex(of: hi) ?? 0, loK = temps.firstIndex(of: lo) ?? 0
+        return ZStack {
+            Path { p in
+                guard temps.count > 1 else { return }
+                p.move(to: pt(0))
+                for k in 1..<temps.count {
+                    let a = pt(k - 1), b = pt(k)
+                    p.addCurve(to: b, control1: CGPoint(x: (a.x + b.x) / 2, y: a.y), control2: CGPoint(x: (a.x + b.x) / 2, y: b.y))
+                }
+            }
+            .stroke(Color.white.opacity(0.95), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+            .shadow(color: .black.opacity(0.35), radius: 1.5)
+            if temps.count > 1 {
+                marker(state.unit.temp(hi), at: pt(hiK), above: true, w: w)
+                marker(state.unit.temp(lo), at: pt(loK), above: false, w: w)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 9))
+    }
+
+    private func marker(_ t: Int, at p: CGPoint, above: Bool, w: CGFloat) -> some View {
+        ZStack {
+            Circle().fill(Color.white).frame(width: 5, height: 5).position(p)
+            Text("\(t)°").font(.system(size: 9, weight: .heavy)).foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.5), radius: 1)
+                .fixedSize()
+                .position(x: min(max(p.x, 12), w - 12), y: above ? max(p.y - 0.5, 6) + 6 : min(p.y + 0.5, trackH - 6) - 6)
+                .offset(x: p.x < w - 24 ? 12 : -12)
+        }
+    }
+
+    // MARK: Data
+
+    private var place: Place? { state.forecast?.place }
+
+    private func skyStops(n: Int) -> [Gradient.Stop] {
+        guard let place, hours.count > 1 else { return [.init(color: line, location: 0), .init(color: line, location: 1)] }
+        return hours.enumerated().map { k, h in
+            let alt = Astronomy.sunAltitude(latitude: place.latitude, longitude: place.longitude, at: h.time)
+            let s = Sky.at(altitude: alt, cover: h.condition.cloudCover, precip: h.condition.precip != .none)
+            return .init(color: Color(hex: Sky.lerp(s.mid, s.top, 0.35)), location: CGFloat(k) / CGFloat(n))
+        }
+    }
+
+    /// (index, isSunrise) where day turns to night or back.
+    private func sunEvents() -> [(Int, Bool)] {
+        guard hours.count > 1 else { return [] }
+        return (1..<hours.count).compactMap { k in
+            hours[k].isDay != hours[k - 1].isDay ? (k, hours[k].isDay) : nil
+        }
+    }
+
+    private func isSunEvent(_ k: Int) -> Bool { sunEvents().contains { $0.0 == k } }
 
     private func label(_ d: Date) -> String {
         let f = DateFormatter(); f.timeZone = state.forecast?.timeZone; f.dateFormat = "ha"
@@ -312,6 +436,10 @@ struct HourScrubber: View {
 
 struct ForecastStrip: View {
     @EnvironmentObject var state: AppState
+    @Environment(\.sky) private var sky
+    private var ink: Color { sky?.ink ?? ink }
+    private var muted: Color { sky?.muted ?? muted }
+    private var line: Color { sky?.line ?? line }
     @Binding var selected: Int
 
     var body: some View {
@@ -323,11 +451,11 @@ struct ForecastStrip: View {
                     DayIcon(condition: d.condition)
                     Text("\(state.unit.temp(d.high))").font(.system(size: 19, weight: .heavy))
                     Text("\(state.unit.temp(d.low))").font(.system(size: 19, weight: .heavy))
-                        .foregroundStyle(state.skin.muted)
+                        .foregroundStyle(muted)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
-                .background(RoundedRectangle(cornerRadius: 14).fill(state.skin.ink.opacity(i == selected ? 0.12 : 0)))
+                .background(RoundedRectangle(cornerRadius: 14).fill(ink.opacity(i == selected ? 0.12 : 0)))
                 .contentShape(Rectangle())
                 .onTapGesture {
                     withAnimation(.easeInOut(duration: 0.2)) { selected = i }

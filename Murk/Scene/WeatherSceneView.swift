@@ -167,6 +167,9 @@ final class WeatherScene: NSObject {
         if force || p?.isDay != c.isDay || p?.cover != c.cover || p?.precip != c.precip {
             showStars(!c.isDay, cover: c.cover, precip: c.precip != .none)
         }
+        if force || p?.isDay != c.isDay || p?.cover != c.cover || p?.precip != c.precip || p?.skin != c.skin || p?.sunAltitude != c.sunAltitude {
+            applySkyTint(c)
+        }
         if force || p?.windSpeed != c.windSpeed || p?.windDirection != c.windDirection || p?.precip != c.precip || p?.intensity != c.intensity {
             applyWind(speed: c.windSpeed, from: c.windDirection)
         }
@@ -184,7 +187,7 @@ final class WeatherScene: NSObject {
         precipNode.removeAllParticleSystems()
         starNode.isHidden = true
         buildClouds(cover: cover, animated: false)
-        buildOrb(isDay: isDay, moonAge: moonAge, sunAltitude: 45, skin: skin)
+        buildOrb(isDay: isDay, moonAge: moonAge, sunAltitude: 45, skin: skin, glow: false)
         scene.background.contents = UIColor(red: 0, green: 1, blue: 0, alpha: 1)   // chroma key: nothing in the sky is green
         cameraNode.position = SCNVector3(0, 2.0, 8.0)
         cameraNode.orientation = SCNQuaternion(0, 0, 0, 1)
@@ -234,17 +237,34 @@ final class WeatherScene: NSObject {
         default:       key = (.white, 1150); amb = (.white, 150)
         }
         // Moonlight comes from where the moon sits (up and behind); by day the rim light is back in its usual spot.
-        let rimAt = night ? SCNVector3(4.6, 8.5, -7.5) : SCNVector3(4, 3, -7)
+        let rimAt = SCNVector3(4.6, night ? 8.5 : Float(2.5 + min(max(alt, 0), 60) / 10), -7.5)
         SCNTransaction.begin(); SCNTransaction.animationDuration = 1.2
         keyLight.light?.color = key.0; keyLight.light?.intensity = key.1
         ambLight.light?.color = amb.0; ambLight.light?.intensity = amb.1
-        rimLight.light?.color = night ? UIColor(red: 0.86, green: 0.91, blue: 1, alpha: 1) : key.0
-        rimLight.light?.intensity = night ? 1700 : 480
+        let golden = UIColor(red: 1, green: 0.84, blue: 0.58, alpha: 1)
+        rimLight.light?.color = night ? UIColor(red: 0.86, green: 0.91, blue: 1, alpha: 1) : key.0.blended(toward: golden, by: 0.6)
+        rimLight.light?.intensity = night ? 1700 : 1500
+        if !night { ambLight.light?.color = amb.0.blended(toward: UIColor(red: 0.72, green: 0.8, blue: 0.95, alpha: 1), by: 0.5) }
         rimLight.position = rimAt
         rimLight.look(at: SCNVector3Zero)
         // A faint blue glow keeps dark skins readable at night.
         cloudMat.emission.contents = night ? UIColor(red: 0.09, green: 0.12, blue: 0.22, alpha: 1) : UIColor.black
         digitMat.emission.contents = night ? UIColor(red: 0.06, green: 0.08, blue: 0.16, alpha: 1) : UIColor.black
+        SCNTransaction.commit()
+    }
+
+    /// On a bright sky, dark-skin clouds turn white with a soft blue shade and the digits go slate,
+    /// like the sunny-day look. Overcast keeps them grey; light skins keep their own colors.
+    private func applySkyTint(_ c: SceneConfig) {
+        let s = c.skin
+        let grey = c.precip != .none ? 1 : min(1, max(0, (c.cover - 0.5) / 0.4))
+        let dayness = c.isDay ? min(1, max(0, (c.sunAltitude + 2) / 10)) : 0
+        let t = s.isLight ? 0 : CGFloat(dayness * (1 - grey * 0.55))
+        let cloudDay = UIColor(red: 0.95, green: 0.95, blue: 0.94, alpha: 1)
+        let digitDay = UIColor(hex: 0x2B3F5C)
+        SCNTransaction.begin(); SCNTransaction.animationDuration = 1.0
+        cloudMat.diffuse.contents = UIColor(hex: s.cloudHex).blended(toward: cloudDay, by: t * 0.92)
+        digitMat.diffuse.contents = UIColor(hex: s.digitHex).blended(toward: digitDay, by: t)
         SCNTransaction.commit()
     }
 
@@ -458,7 +478,8 @@ final class WeatherScene: NSObject {
         ctx.cgContext.fillEllipse(in: CGRect(x: 0, y: 0, width: 16, height: 16))
     }
 
-    private func buildOrb(isDay: Bool, moonAge: Double, sunAltitude: Double, skin: Skin) {
+    private func buildOrb(isDay: Bool, moonAge: Double, sunAltitude: Double, skin: Skin, glow: Bool = true) {
+        orbNode.childNodes.forEach { $0.removeFromParentNode() }
         let sphere = SCNSphere(radius: 1)
         sphere.segmentCount = 64
         if isDay {
@@ -468,7 +489,9 @@ final class WeatherScene: NSObject {
             let a = min(max(sunAltitude, 0), 40) / 40
             orbNode.position = SCNVector3(1.15, Float(1.35 + 1.1 * a), -1.6)
             let golden = max(0, 1 - sunAltitude / 14)
-            sunMat.diffuse.contents = UIColor(hex: skin.sunHex).blended(toward: UIColor(red: 1, green: 0.55, blue: 0.2, alpha: 1), by: CGFloat(golden * 0.75))
+            let sunColor = UIColor(hex: skin.sunHex).blended(toward: UIColor(red: 1, green: 0.55, blue: 0.2, alpha: 1), by: CGFloat(golden * 0.75))
+            sunMat.diffuse.contents = sunColor
+            if glow { addSunGlow(color: sunColor) }
         } else {
             orbNode.position = SCNVector3(1.15, 2.45, -1.6)
             // Light the moon from where the sun really is, so the lit part matches tonight's phase.
@@ -483,6 +506,65 @@ final class WeatherScene: NSObject {
     }
 }
 
+
+extension WeatherScene {
+    /// A soft pulsing halo and slowly turning rays around the sun, always facing the camera.
+    fileprivate func addSunGlow(color: UIColor) {
+        let holder = SCNNode()
+        holder.constraints = [SCNBillboardConstraint()]
+        holder.position = SCNVector3(0, 0, -0.05)
+        func plane(_ size: CGFloat, _ img: UIImage, _ opacity: CGFloat) -> SCNNode {
+            let g = SCNPlane(width: size, height: size)
+            let m = SCNMaterial()
+            m.lightingModel = .constant
+            m.diffuse.contents = img
+            m.multiply.contents = color.blended(toward: .white, by: 0.45)
+            m.blendMode = .add
+            m.writesToDepthBuffer = false
+            m.isDoubleSided = true
+            g.materials = [m]
+            let n = SCNNode(geometry: g); n.opacity = opacity; n.categoryBitMask = 4
+            return n
+        }
+        let halo = plane(5.2, Self.haloImage, 0.85)
+        let pulse = SCNAction.sequence([.scale(to: 1.06, duration: 2.6), .scale(to: 0.96, duration: 2.6)])
+        pulse.timingMode = .easeInEaseOut
+        halo.runAction(.repeatForever(pulse))
+        let rays = plane(4.6, Self.raysImage, 0.55)
+        rays.runAction(.repeatForever(.rotateBy(x: 0, y: 0, z: .pi * 2, duration: 90)))
+        holder.addChildNode(halo)
+        holder.addChildNode(rays)
+        // Glow sits behind the sun disc (orb sphere radius 1 inside a 5-wide halo).
+        holder.renderingOrder = -1
+        orbNode.addChildNode(holder)
+    }
+
+    fileprivate static let haloImage: UIImage = UIGraphicsImageRenderer(size: CGSize(width: 256, height: 256)).image { ctx in
+        let cs = CGColorSpaceCreateDeviceRGB()
+        let colors = [UIColor(white: 1, alpha: 0.9).cgColor, UIColor(white: 1, alpha: 0.35).cgColor,
+                      UIColor(white: 1, alpha: 0.08).cgColor, UIColor(white: 1, alpha: 0).cgColor] as CFArray
+        let g = CGGradient(colorsSpace: cs, colors: colors, locations: [0, 0.3, 0.62, 1])!
+        ctx.cgContext.drawRadialGradient(g, startCenter: CGPoint(x: 128, y: 128), startRadius: 0,
+                                         endCenter: CGPoint(x: 128, y: 128), endRadius: 128, options: [])
+    }
+
+    fileprivate static let raysImage: UIImage = UIGraphicsImageRenderer(size: CGSize(width: 512, height: 512)).image { ctx in
+        let c = ctx.cgContext
+        c.translateBy(x: 256, y: 256)
+        c.setLineCap(.round)
+        for i in 0..<12 {
+            c.saveGState()
+            c.rotate(by: CGFloat(i) * .pi / 6)
+            let long = i % 2 == 0
+            c.setStrokeColor(UIColor(white: 1, alpha: long ? 0.7 : 0.45).cgColor)
+            c.setLineWidth(long ? 12 : 8)
+            c.move(to: CGPoint(x: 0, y: 128))
+            c.addLine(to: CGPoint(x: 0, y: long ? 222 : 188))
+            c.strokePath()
+            c.restoreGState()
+        }
+    }
+}
 
 extension UIColor {
     func blended(toward other: UIColor, by t: CGFloat) -> UIColor {
