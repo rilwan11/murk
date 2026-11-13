@@ -144,12 +144,24 @@ final class WeatherScene: NSObject {
     }
 
     func resetCamera(animated: Bool) {
+        // Once the user drags, SceneKit's camera control may swap in its own camera node,
+        // so reset whichever node the view is actually looking through, then hand our camera back.
+        let povs = [cameraNode] + [view?.pointOfView].compactMap { $0 }.filter { $0 !== cameraNode }
+        view?.defaultCameraController.stopInertia()
         SCNTransaction.begin()
         SCNTransaction.animationDuration = animated ? 0.6 : 0
-        cameraNode.position = Self.home
-        cameraNode.orientation = SCNQuaternion(0, 0, 0, 1)
+        SCNTransaction.animationTimingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        for n in povs {
+            n.position = Self.home
+            n.orientation = SCNQuaternion(0, 0, 0, 1)
+            n.camera?.fieldOfView = 34
+        }
+        SCNTransaction.completionBlock = { [weak self] in
+            guard let self, let v = self.view else { return }
+            v.pointOfView = self.cameraNode
+            v.defaultCameraController.target = Self.target
+        }
         SCNTransaction.commit()
-        view?.defaultCameraController.target = Self.target
     }
 
     private func applySkin(_ s: Skin) {
