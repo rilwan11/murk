@@ -14,7 +14,7 @@ Docs: [Privacy Policy](PRIVACY.md) · [Terms of Use](TERMS.md) · [Changelog](CH
   - **Sun:** sunrise, sunset, solar noon, daylight, and the sun's current height.
   - **Moon:** tonight's real phase, illumination, and the next full and new moons.
 - **Settings:** skins (Graphite, Ember, Aurora), °F/°C, minimal mode, a heads-up pill, and weekly stats.
-- **Widgets:** small, medium (5-day), and large (7-day with temperature bars) for the home screen, plus circular, rectangular, and inline lock-screen widgets. They follow the city you last viewed in the app, along with your units and skin, and refresh about every 30 minutes.
+- **Widgets:** small, medium (5-day), and large (7-day with temperature bars) for the home screen, plus circular, rectangular, and inline lock-screen widgets. They follow the city you last viewed in the app, along with your units and skin, and refresh about every 30 minutes. With Murk Pro, long-press a widget and choose Edit Widget to pin it to a saved city or change its style.
 - **App icon:** "Night Murk", a matte black cloud with a crescent moon.
 
 ## What you need

@@ -1,5 +1,6 @@
 import WidgetKit
 import SwiftUI
+import AppIntents
 
 // MARK: - Timeline
 
@@ -8,50 +9,102 @@ struct WeatherEntry: TimelineEntry {
     let forecast: Forecast?
     let unit: TempUnit
     let skin: Skin
+    var look: WidgetLook = .sky
 }
 
-struct Provider: TimelineProvider {
+// MARK: - Editing a widget (place and style are part of Murk Pro)
+
+struct PlaceEntity: AppEntity {
+    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Place"
+    static var defaultQuery = PlaceQuery()
+    var id: String
+    var name: String
+    var displayRepresentation: DisplayRepresentation { DisplayRepresentation(title: "\(name)") }
+}
+
+struct PlaceQuery: EntityQuery {
+    func entities(for identifiers: [String]) async throws -> [PlaceEntity] {
+        SharedStore.places.filter { identifiers.contains($0.id) }.map { PlaceEntity(id: $0.id, name: $0.name) }
+    }
+
+    /// Saved cities, offered only with Murk Pro. Leaving the place empty follows the app.
+    func suggestedEntities() async throws -> [PlaceEntity] {
+        guard SharedStore.isPro else { return [] }
+        return SharedStore.places.map { PlaceEntity(id: $0.id, name: $0.name) }
+    }
+}
+
+enum WidgetStyleOption: String, AppEnum {
+    case sky, skin, midnight
+    static var typeDisplayRepresentation: TypeDisplayRepresentation = "Style"
+    static var caseDisplayRepresentations: [WidgetStyleOption: DisplayRepresentation] = [
+        .sky: "Live sky",
+        .skin: "Skin color (Murk Pro)",
+        .midnight: "Midnight (Murk Pro)",
+    ]
+    var look: WidgetLook { WidgetLook(rawValue: rawValue) ?? .sky }
+}
+
+struct MurkWidgetIntent: WidgetConfigurationIntent {
+    static var title: LocalizedStringResource = "Murk"
+    static var description = IntentDescription("Leave Place empty to follow the app. Choosing a city or another style needs Murk Pro.")
+
+    @Parameter(title: "Place")
+    var place: PlaceEntity?
+
+    @Parameter(title: "Style", default: .sky)
+    var style: WidgetStyleOption
+}
+
+struct Provider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> WeatherEntry {
         WeatherEntry(date: .now, forecast: .sample, unit: SharedStore.unit, skin: SharedStore.skin)
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (WeatherEntry) -> Void) {
-        if context.isPreview { completion(placeholder(in: context)); return }
-        Task { completion(await load()) }
+    func snapshot(for configuration: MurkWidgetIntent, in context: Context) async -> WeatherEntry {
+        if context.isPreview { return placeholder(in: context) }
+        return await load(configuration)
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<WeatherEntry>) -> Void) {
-        Task {
-            let first = await load()
-            // Same forecast, but the sky behind it keeps moving through the next hour.
-            let entries = (0..<4).map { i in
-                WeatherEntry(date: first.date.addingTimeInterval(Double(i) * 15 * 60), forecast: first.forecast, unit: first.unit, skin: first.skin)
-            }
-            // Refresh every 30 minutes (iOS may stretch this to save battery).
-            completion(Timeline(entries: entries, policy: .after(Date().addingTimeInterval(30 * 60))))
+    func timeline(for configuration: MurkWidgetIntent, in context: Context) async -> Timeline<WeatherEntry> {
+        let first = await load(configuration)
+        // Same forecast, but the sky behind it keeps moving through the next hour.
+        let entries = (0..<4).map { i in
+            WeatherEntry(date: first.date.addingTimeInterval(Double(i) * 15 * 60), forecast: first.forecast,
+                         unit: first.unit, skin: first.skin, look: first.look)
         }
+        // Refresh every 30 minutes (iOS may stretch this to save battery).
+        return Timeline(entries: entries, policy: .after(Date().addingTimeInterval(30 * 60)))
     }
 
     /// Draws from the snapshot the app shares. The network is used only when there's no usable
     /// snapshot, and then just once, briefly.
-    private func load() async -> WeatherEntry {
-        let saved = WidgetSnapshot.load()
-        if let s = saved, s.isFresh() { return entry(s) }
+    private func load(_ configuration: MurkWidgetIntent) async -> WeatherEntry {
+        let choice = WidgetChoice.resolve(placeID: configuration.place?.id, look: configuration.style.look,
+                                          isPro: SharedStore.isPro, places: SharedStore.places)
+        // A widget pinned to a city keeps its own snapshot; otherwise it follows the app.
+        let url = choice.place.flatMap { WidgetSnapshot.url(placeID: $0.id) } ?? WidgetSnapshot.defaultURL
+        let place = choice.place?.place ?? SharedStore.place
+        let saved = WidgetSnapshot.load(from: url)
+        // The app keeps its own city fresh; a pinned city is refreshed here about once an hour.
+        let freshFor: TimeInterval = choice.place == nil ? WidgetSnapshot.freshFor : 3600
+        if let s = saved, Date().timeIntervalSince(s.fetchedAt) < freshFor { return entry(s, choice.look) }
 
         var repo = WeatherRepository()
         repo.firstTimeout = 8
         repo.allowRetry = false
-        if let f = try? await repo.core(for: SharedStore.place) {
-            let s = WidgetSnapshot(forecast: f, unit: saved?.tempUnit ?? SharedStore.unit, skin: saved?.skinValue ?? SharedStore.skin)
-            s.save()
-            return entry(s)
+        if let f = try? await repo.core(for: place) {
+            let s = WidgetSnapshot(forecast: f, unit: SharedStore.unit, skin: SharedStore.skin)
+            s.save(to: url)
+            return entry(s, choice.look)
         }
-        if let s = saved, s.isUsable() { return entry(s) }     // offline: the last forecast still beats nothing
-        return WeatherEntry(date: .now, forecast: nil, unit: SharedStore.unit, skin: SharedStore.skin)
+        if let s = saved, s.isUsable() { return entry(s, choice.look) }     // offline: the last forecast still beats nothing
+        return WeatherEntry(date: .now, forecast: nil, unit: SharedStore.unit, skin: SharedStore.skin, look: choice.look)
     }
 
-    private func entry(_ s: WidgetSnapshot) -> WeatherEntry {
-        WeatherEntry(date: .now, forecast: s.forecast, unit: s.tempUnit, skin: s.skinValue)
+    private func entry(_ s: WidgetSnapshot, _ look: WidgetLook) -> WeatherEntry {
+        // Units and skin always follow the app's current settings.
+        WeatherEntry(date: .now, forecast: s.forecast, unit: SharedStore.unit, skin: SharedStore.skin, look: look)
     }
 }
 
@@ -64,7 +117,7 @@ struct MurkWidgetBundle: WidgetBundle {
 
 struct MurkWeatherWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "MurkWeather", provider: Provider()) { entry in
+        AppIntentConfiguration(kind: "MurkWeather", intent: MurkWidgetIntent.self, provider: Provider()) { entry in
             WidgetView(entry: entry)
         }
         .configurationDisplayName("Murk")
@@ -96,7 +149,13 @@ struct WidgetView: View {
         // On tinted/clear home screens iOS turns all text one color, so the sky goes deeper to keep it readable,
         // and it's drawn as a picture, which is the one thing iOS lets keep its color there.
         let accented = mode != .fullColor
-        let live = entry.forecast.flatMap { Sky.current($0, skin: entry.skin, at: entry.date) }
+        let live: Sky? = {
+            switch entry.look {
+            case .sky: return entry.forecast.flatMap { Sky.current($0, skin: entry.skin, at: entry.date) }
+            case .skin: return nil                                                  // the skin's own flat color
+            case .midnight: return Sky.at(altitude: -40, cover: 0, precip: false)   // always a clear night
+            }
+        }()
         let sky = accented ? (live ?? Sky.at(altitude: -30, cover: 0, precip: false)).deepened() : live
         let p = Palette(skin: entry.skin, sky: sky)
         Group {

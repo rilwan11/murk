@@ -77,7 +77,7 @@ final class FakeLocation: LocationProviding {
 func makeState(weather: FakeWeather = FakeWeather(), location: FakeLocation = FakeLocation(),
                defaults: UserDefaults = Fixture.defaults(), places: [Place] = [Fixture.la, Fixture.ny]) -> AppState {
     defaults.set(try! JSONEncoder().encode(places), forKey: "places")
-    let effects = AppState.Effects(syncWidget: { _, _, _, _ in }, notify: { _, _, _, _ in })
+    let effects = AppState.Effects(syncWidget: { _, _, _, _ in }, notify: { _, _, _, _ in }, shareLibrary: { _, _ in })
     return AppState(repository: weather, location: location, defaults: defaults, effects: effects)
 }
 

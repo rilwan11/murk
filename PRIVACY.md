@@ -30,9 +30,14 @@ Like any internet request, these services can see your IP address. Murk sends no
 
 - The last forecast for recently viewed places, so Murk works offline. Files are named with a hash (not coordinates or city names), are protected by iOS file protection, and are deleted after 48 hours.
 - A small forecast summary shared with Murk's widgets through the app's private App Group. It holds the place name, coordinates rounded to about 11 km, and the temperatures and conditions the widgets show.
+- The list of your saved cities (names, and coordinates rounded to about 1 km) and whether Murk Pro is active, shared with Murk's widgets through the same App Group so a widget can show a city you choose.
 - A list of weather-alert identifiers already notified, kept for 14 days so you aren't notified twice.
 
 Murk keeps no history of where you have been.
+
+## iCloud sync (optional, Murk Pro, not in every build)
+
+If you turn on "Sync with iCloud", your saved cities and preferences are stored in your own private iCloud account so your devices match. Murk has no server and cannot see this data. Your current location, the city you are viewing and any history are never synced. "Reset synced data" in Settings removes it from iCloud; turning the switch off stops syncing.
 
 ## Notifications
 

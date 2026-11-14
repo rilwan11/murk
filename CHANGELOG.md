@@ -21,6 +21,9 @@
 
 ### New
 - **Murk Pro** (monthly or annual): unlimited saved cities, the Aurora, Storm and Sunset skins plus Auto, and notifications for rain, wind, UV and air quality. The free app keeps the full forecast, Current Location and one saved city, widgets and official alerts. Cities you already saved are kept.
+- **More in Murk Pro:** all your places at a glance (each under its own sky, with local time and how far ahead or behind it is); widgets you can point at any saved city; two extra widget styles (Skin color and Midnight); Aurora, Storm and Sunset app icons.
+- **iCloud sync** for saved cities and preferences is written and tested but switched off in this build, because it needs the paid Apple Developer Program. See `docs/APP_STORE.md`, section 7.
+- Widgets are now editable (long-press › Edit Widget). Existing widgets keep following the app.
 - Alert details sheet, with severe alerts marked by shape as well as color.
 - "What changes next" line under the conditions (rain starting or easing, strong gusts, a big temperature swing).
 - Hourly wind chart on the Air page.

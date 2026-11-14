@@ -21,6 +21,7 @@ extension View {
 struct RootView: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var store: EntitlementStore
+    @EnvironmentObject var cloud: CloudSync
     @Environment(\.scenePhase) private var phase
     @State private var page = 0
     @State private var drag: CGFloat = 0
@@ -70,13 +71,15 @@ struct RootView: View {
         .foregroundStyle(skin.ink)
         .preferredColorScheme(skin.isLight ? .light : .dark)
         .sheet(isPresented: $showSettings) {
-            SettingsSheet().environmentObject(state).environmentObject(store)
+            SettingsSheet().environmentObject(state).environmentObject(store).environmentObject(cloud)
         }
         // From Settings the paywall is presented by the settings sheet itself.
         .sheet(item: showSettings ? .constant(nil) : $state.paywall) { reason in
             PaywallView(reason: reason).environmentObject(store)
         }
         .onChange(of: state.route) { _, _ in follow() }
+        // iCloud sync (when this build has it and it's on): send changes up as they happen.
+        .onChange(of: state.syncedSettings) { _, new in cloud.push(new, isPro: state.isPro) }
         .onAppear { follow() }
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .animation(.easeInOut(duration: 0.4), value: skin)

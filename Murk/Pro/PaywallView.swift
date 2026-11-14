@@ -19,6 +19,9 @@ struct PaywallView: View {
         case .city: return String(localized: "Saving more than one city is part of Murk Pro.")
         case .skin: return String(localized: "This skin is part of Murk Pro.")
         case .alerts: return String(localized: "Rain, wind, UV and air-quality alerts are part of Murk Pro.")
+        case .overview: return String(localized: "Seeing all your places at a glance is part of Murk Pro.")
+        case .icon: return String(localized: "This app icon is part of Murk Pro.")
+        case .sync: return String(localized: "Syncing cities and settings with iCloud is part of Murk Pro.")
         case .general: return String(localized: "Everything in Murk, plus more places, looks and alerts.")
         }
     }
@@ -31,6 +34,9 @@ struct PaywallView: View {
         ("mappin.and.ellipse", "Unlimited saved cities", "", false),
         ("paintpalette.fill", "Aurora, Storm and Sunset skins, plus Auto", "", false),
         ("bell.badge.fill", "Alerts for rain, wind, UV and air quality", "", false),
+        ("rectangle.stack.fill", "All places at a glance, with local times", "", false),
+        ("square.grid.2x2", "Widgets for any saved city, and widget styles", "", false),
+        ("app.badge.fill", "Aurora, Storm and Sunset app icons", "", false),
     ]
 
     var body: some View {

@@ -31,6 +31,7 @@ targets:
         NSPhotoLibraryAddUsageDescription: "Murk saves weather wallpapers to your Photos."
         NSLocationWhenInUseUsageDescription: "Murk uses your location to retrieve local weather, air quality, and weather alerts."
         MurkWeatherAPIKey: "$(MURK_WEATHER_API_KEY)"
+        MurkCloudSync: "$(MURK_ICLOUD_SYNC)"
         CFBundleURLTypes:
           - CFBundleURLName: com.rilwan11.murk
             CFBundleURLSchemes:
@@ -57,6 +58,10 @@ targets:
         INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "Murk uses your location to retrieve local weather, air quality, and weather alerts."
         SWIFT_OBJC_BRIDGING_HEADER: Murk/Audio/Murk-Bridging-Header.h
         MURK_WEATHER_API_KEY: ""
+        # iCloud sync needs the paid developer program: set to YES and add the
+        # com.apple.developer.ubiquity-kvstore-identifier entitlement (see docs/APP_STORE.md).
+        MURK_ICLOUD_SYNC: "NO"
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIcon-Aurora AppIcon-Storm AppIcon-Sunset"
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIUserInterfaceStyle: Dark
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait

@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 /// The small slice of the forecast the widgets need, written by the app into the App Group
 /// so widgets can draw instantly, match the app, and keep working offline.
@@ -71,6 +72,17 @@ struct WidgetSnapshot: Codable, Equatable {
 
     static var defaultURL: URL? {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: SharedStore.appGroup)?.appendingPathComponent(fileName)
+    }
+
+    /// Where the snapshot for one specific saved city lives (for widgets pinned to a city).
+    /// The file name is a hash, so it says nothing about the place.
+    static func fileName(placeID: String) -> String {
+        let hash = SHA256.hash(data: Data("murk-widget|\(placeID)".utf8)).prefix(10).map { String(format: "%02x", $0) }.joined()
+        return "widget-place-v\(version)-\(hash).json"
+    }
+
+    static func url(placeID: String) -> URL? {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: SharedStore.appGroup)?.appendingPathComponent(fileName(placeID: placeID))
     }
 
     func encoded() throws -> Data {

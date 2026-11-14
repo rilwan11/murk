@@ -5,6 +5,9 @@ import UIKit
 struct SettingsSheet: View {
     @EnvironmentObject var state: AppState
     @EnvironmentObject var store: EntitlementStore
+    @EnvironmentObject var cloud: CloudSync
+    @State private var icon = AppIcon.night
+    @State private var confirmReset = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var explainNotifications = false
@@ -78,6 +81,23 @@ struct SettingsSheet: View {
                     }
                     .onDelete { state.remove(at: $0) }
                     .onMove { state.move(from: $0, to: $1) }
+
+                    if state.places.count + (state.isFollowingLocation ? 1 : 0) > 1 || !state.isPro {
+                        if state.isPro {
+                            NavigationLink {
+                                PlacesOverview(onPick: { dismiss() }).environmentObject(state)
+                            } label: {
+                                Label("All places at a glance", systemImage: "rectangle.stack")
+                            }
+                        } else {
+                            Button { state.paywall = .overview } label: {
+                                HStack {
+                                    Label("All places at a glance", systemImage: "rectangle.stack")
+                                    proBadge
+                                }
+                            }
+                        }
+                    }
 
                     if adding {
                         TextField("Search for a city", text: $search.query)
@@ -179,6 +199,58 @@ struct SettingsSheet: View {
                 .tint(state.skin.accent)
 
                 Section {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 14) {
+                            ForEach(AppIcon.allCases) { choice in
+                                let locked = choice.isPremium && !state.isPro
+                                Button {
+                                    if locked { state.paywall = .icon; return }
+                                    Task { if await AppIcon.set(choice) { icon = choice } }
+                                } label: {
+                                    VStack(spacing: 6) {
+                                        Image(choice.previewImage).resizable().frame(width: 64, height: 64)
+                                            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                                            .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(icon == choice ? Color.white : .clear, lineWidth: 3))
+                                            .overlay(alignment: .topTrailing) {
+                                                if locked { Image(systemName: "lock.fill").font(.system(size: 10, weight: .bold)).padding(5).background(Circle().fill(.black.opacity(0.6))).padding(3) }
+                                            }
+                                        HStack(spacing: 3) {
+                                            if icon == choice { Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)) }
+                                            Text(choice.name).font(.caption2)
+                                        }
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(Text(locked ? "\(choice.name) icon, Murk Pro" : "\(choice.name) icon"))
+                                .accessibilityAddTraits(icon == choice ? .isSelected : [])
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                } header: { header("App icon") }
+
+                if CloudSync.isAvailableInThisBuild {
+                    Section {
+                        Toggle(isOn: Binding(get: { cloud.enabled && state.isPro }, set: { on in
+                            if on && !state.isPro { state.paywall = .sync; return }
+                            if on { cloud.turnOn(current: state.syncedSettings, isPro: state.isPro) } else { cloud.enabled = false }
+                        })) {
+                            HStack {
+                                Label("Sync with iCloud", systemImage: "icloud")
+                                if !state.isPro { proBadge }
+                            }
+                        }
+                        if cloud.enabled, let t = cloud.lastSynced {
+                            Text("Last synced \(t.formatted(date: .abbreviated, time: .shortened))").font(.footnote).foregroundStyle(.secondary)
+                        }
+                        Button("Reset synced data", role: .destructive) { confirmReset = true }
+                    } header: { header("iCloud") } footer: {
+                        Text("Keeps your saved cities and preferences the same on your devices. They are stored in your own private iCloud account; Murk has no server and never syncs where you are or have been. Murk works the same with this off.")
+                    }
+                    .tint(state.skin.accent)
+                }
+
+                Section {
                     Button {
                         makeWallpaper()
                     } label: {
@@ -244,6 +316,12 @@ struct SettingsSheet: View {
             } message: {
                 Text("Murk will only notify you about the weather you choose here, for the place it is showing. iOS will ask for permission next. You can change this any time.")
             }
+            .confirmationDialog("Remove Murk's data from iCloud?", isPresented: $confirmReset, titleVisibility: .visible) {
+                Button("Reset synced data", role: .destructive) { cloud.reset() }
+            } message: {
+                Text("This device keeps its cities and settings. Sync is turned off until you turn it on again.")
+            }
+            .onAppear { icon = AppIcon.current }
             .manageSubscriptionsSheet(isPresented: $manageSubscription)
             .sheet(item: $state.paywall) { reason in
                 PaywallView(reason: reason).environmentObject(store)
@@ -307,6 +385,11 @@ struct SettingsSheet: View {
         } else {
             notificationsBlocked = true
         }
+    }
+
+    private var proBadge: some View {
+        Text("PRO").font(.mono(9)).padding(.horizontal, 5).padding(.vertical, 2).overlay(Capsule().stroke(.secondary))
+            .accessibilityLabel(Text("Murk Pro"))
     }
 
     private func header(_ t: String) -> some View {

@@ -4,6 +4,7 @@ import SwiftUI
 struct MurkApp: App {
     @StateObject private var state = AppState()
     @StateObject private var store = EntitlementStore()
+    @StateObject private var cloud = CloudSync()
     @Environment(\.scenePhase) private var phase
 
     /// Unit tests host the app; they drive their own state and must not start real work.
@@ -16,10 +17,19 @@ struct MurkApp: App {
             RootView()
                 .environmentObject(state)
                 .environmentObject(store)
+                .environmentObject(cloud)
                 .task {
                     guard !Self.isUnitTesting else { return }
                     let s = state
-                    store.onChange = { [weak s] pro in s?.setPro(pro) }
+                    store.onChange = { [weak s] pro in
+                        s?.setPro(pro)
+                        if !pro { AppIcon.revertIfPremium() }
+                    }
+                    if CloudSync.isAvailableInThisBuild {
+                        cloud.onRemote = { [weak s] settings in s?.apply(settings) }
+                        cloud.startObserving { [weak s] in s?.isPro ?? false }
+                        cloud.pull(isPro: state.isPro)
+                    }
                     store.start()
                     await state.migrateNotifications()
                     await state.start()
@@ -32,6 +42,7 @@ struct MurkApp: App {
                         SoundEngine.shared.resume()
                         state.refreshIfStale()
                         Task { await store.refresh() }
+                        if CloudSync.isAvailableInThisBuild { cloud.pull(isPro: state.isPro) }
                     case .background:
                         SoundEngine.shared.stop()
                         BackgroundRefresh.schedule()

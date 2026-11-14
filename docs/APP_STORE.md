@@ -33,6 +33,9 @@ Nothing here has been submitted. Items marked **OWNER** need a decision or an ac
 > • Unlimited saved cities
 > • Aurora, Storm and Sunset skins, plus Auto
 > • Notifications for rain, wind, UV and air quality
+> • All your places at a glance, with local times
+> • Widgets for any saved city, plus extra widget styles
+> • Aurora, Storm and Sunset app icons
 >
 > No account. No ads. No tracking.
 >
@@ -87,7 +90,7 @@ No third-party SDKs. No ATT prompt (nothing is tracked). The app and widget each
 >
 > **Location:** Murk does not ask for location at launch. Tap "USE MY LOCATION" on the main screen, or Settings (slider icon) › "Use Current Location". If you decline, the app keeps working with a saved city (San Diego by default) and city search.
 >
-> **Murk Pro paywall:** Settings › "Murk Pro". It also appears when you (a) tap "Add a city" with one city already saved, (b) tap the Aurora, Storm, Sunset or Auto skin, or (c) turn on a rain, wind, air-quality or UV notification. Restore Purchases and Manage Subscription are on the paywall and in Settings › Murk Pro.
+> **Murk Pro paywall:** Settings › "Murk Pro". It also appears when you (a) tap "Add a city" with one city already saved, (b) tap the Aurora, Storm, Sunset or Auto skin, (c) turn on a rain, wind, air-quality or UV notification, (d) tap "All places at a glance", or (e) tap a tinted app icon. Restore Purchases and Manage Subscription are on the paywall and in Settings › Murk Pro.
 >
 > **Testing Pro:** use a sandbox Apple ID. Products: com.rilwan11.murk.pro.monthly and com.rilwan11.murk.pro.annual (7-day trial).
 >
@@ -109,6 +112,8 @@ Code (done in this repository, verified by CI unless noted):
 - [x] Location requested only on "Use Current Location", When In Use only; notification permission only when an alert is turned on
 - [x] Privacy policy, Terms of Use, privacy manifests
 - [x] Unit tests and CI
+- [x] Pro features: all places at a glance, widgets for a chosen city, widget styles, tinted app icons (unit tested; not yet tried on a device)
+- [ ] iCloud sync switched on and tested on two devices (section 7)
 - [ ] Purchases exercised end to end (needs the StoreKit configuration in Xcode or a sandbox account; not run on CI)
 - [ ] Tested on a physical iPhone after these changes
 
@@ -121,4 +126,21 @@ Owner actions before submission:
 - [ ] Screenshots, App Privacy answers (section 4), review notes (section 5)
 - [ ] Manual pass: fresh install with no permissions; add first and second city as a free user; monthly and annual sandbox purchase; trial start, cancel, expiry, restore; widget tap; VoiceOver and largest text size; Reduce Motion and Reduce Transparency; network loss during purchase and during refresh; launch after renewal and after expiry
 
-Not built yet (do not advertise): iCloud sync, per-location widgets, alternate app icons and widget styles, travel mode / multi-location overview, Live Activities, historical forecasts.
+Built but switched off in this build: **iCloud sync** (see section 7). Do not advertise it until it is on and tested on two devices.
+
+Not built (do not advertise): Live Activities, historical forecasts, radar.
+
+## 7. Turning on iCloud sync — **OWNER**
+
+The code is in the app (`Murk/Pro/CloudSync.swift`, unit tested against a stand-in store) but hidden, because the iCloud entitlement can't be signed with a free Apple account.
+
+1. Enroll in the paid Apple Developer Program.
+2. In `project.yml`, set `MURK_ICLOUD_SYNC: "YES"` and add to the Murk target's entitlements: `com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)$(CFBundleIdentifier)`.
+3. Run `xcodegen`, build to two devices signed in to the same Apple ID, and check: turn sync on on both, add a city on one, see it on the other; "Reset synced data" removes it.
+4. Add "iCloud sync" to the paywall list (`PaywallView.rows`), the description above and the privacy answers (no change: data stays in the user's private iCloud).
+
+What syncs: saved cities, units, skin, minimal mode, heads-up pill, sounds, notification thresholds. What never syncs: current location, the selected city, notification on/off switches, any history.
+
+## 8. Widgets for a chosen city and widget styles
+
+Long-press a Murk widget › Edit Widget. "Place" lists the saved cities and "Style" offers Live sky, Skin color and Midnight. City and non-default styles apply only with Murk Pro; without it the widget follows the app in the live sky. Existing widgets keep working and follow the app.

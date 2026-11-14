@@ -6,7 +6,7 @@ import UserNotifications
 
 /// Why the paywall is being shown (always a moment where Pro adds something the user just asked for).
 enum PaywallReason: String, Identifiable {
-    case city, skin, alerts, general
+    case city, skin, alerts, overview, icon, sync, general
     var id: String { rawValue }
 }
 
@@ -17,10 +17,12 @@ final class AppState: ObservableObject {
     struct Effects {
         var syncWidget: (Forecast?, Place?, TempUnit, Skin) -> Void = LiveEffects.syncWidget
         var notify: (Forecast, NotificationRules, TempUnit, Bool) -> Void = LiveEffects.notify
+        /// Saved cities and Pro status, for widgets pinned to a city.
+        var shareLibrary: ([Place], Bool) -> Void = LiveEffects.shareLibrary
     }
 
     // Places
-    @Published var places: [Place] { didSet { savePlaces() } }
+    @Published var places: [Place] { didSet { savePlaces(); effects.shareLibrary(places, isPro) } }
     /// nil = follow current location
     @Published var selectedID: String? { didSet { defaults.set(selectedID, forKey: "selectedID") } }
     @Published var currentPlace: Place?
@@ -53,7 +55,7 @@ final class AppState: ObservableObject {
 
     private let defaults: UserDefaults
     private let location: LocationProviding
-    private let repository: WeatherProviding
+    let repository: WeatherProviding
     private let effects: Effects
     private var loadTask: Task<Void, Never>?
     /// Only the newest request may touch the screen.
@@ -95,6 +97,7 @@ final class AppState: ObservableObject {
     /// Called by the entitlement store once the App Store has confirmed the subscription state.
     func setPro(_ pro: Bool) {
         isPro = pro
+        effects.shareLibrary(places, pro)
         guard !pro else { return }
         // Pro-only looks fall back to free ones. Saved cities are kept.
         if autoSkin { autoSkin = false }
@@ -126,6 +129,35 @@ final class AppState: ObservableObject {
         default: s = c.isDay ? .graphite : .aurora
         }
         if s != skin { skin = s }
+    }
+
+    // MARK: iCloud sync (settings and saved cities only; never where the user is or has been)
+
+    var syncedSettings: SyncedSettings {
+        SyncedSettings(places: places, unit: unit.rawValue, skin: skin.rawValue, autoSkin: autoSkin,
+                       minimal: minimal, headsUp: alerts, sound: sound, rules: rules)
+    }
+
+    /// Takes settings that arrived from another of the user's devices.
+    func apply(_ s: SyncedSettings) {
+        guard s != syncedSettings else { return }
+        if s.places != places {
+            places = s.places
+            if let id = selectedID, !places.contains(where: { $0.id == id }) {
+                selectedID = useLocation ? nil : places.first?.id
+                begin(force: true, locate: true)
+            }
+        }
+        if let u = TempUnit(rawValue: s.unit), u != unit { unit = u }
+        if let k = Skin(rawValue: s.skin), k != skin, isPro || !k.isPremium { skin = k }
+        if s.autoSkin != autoSkin, isPro || !s.autoSkin { autoSkin = s.autoSkin }
+        if s.minimal != minimal { minimal = s.minimal }
+        if s.headsUp != alerts { alerts = s.headsUp }
+        if s.sound != sound { sound = s.sound }
+        // Notification switches stay per device: each device has its own permission.
+        var r = s.rules
+        r.official = rules.official; r.rain = rules.rain; r.wind = rules.wind; r.aqi = rules.aqi; r.uv = rules.uv
+        if r != rules { rules = r }
     }
 
     // MARK: Cities
@@ -166,6 +198,7 @@ final class AppState: ObservableObject {
 
     func start() async {
         ForecastCache.removeLegacyFiles()
+        effects.shareLibrary(places, isPro)
         if selectedID == nil, !useLocation, let first = places.first { selectedID = first.id }
         begin(force: false, locate: true)
         await loadTask?.value
@@ -448,10 +481,23 @@ enum LiveEffects {
         if let place { SharedStore.place = place }
         SharedStore.unit = unit
         SharedStore.skin = skin
-        if let forecast { WidgetSnapshot(forecast: forecast, unit: unit, skin: skin).save() }
+        if let forecast {
+            let snapshot = WidgetSnapshot(forecast: forecast, unit: unit, skin: skin)
+            snapshot.save()
+            // Widgets pinned to this city read their own copy.
+            if !forecast.place.isCurrentLocation { snapshot.save(to: WidgetSnapshot.url(placeID: forecast.place.id)) }
+        }
         WidgetCenter.shared.reloadAllTimelines()
         let current = forecast.map { (ArtKind(code: $0.current.code), $0.current.isDay) }
         SceneSnapshotter.renderIfNeeded(skin: skin, first: current)
+    }
+
+    static let shareLibrary: ([Place], Bool) -> Void = { places, pro in
+        let shared = places.map(SharedPlace.init)
+        guard shared != SharedStore.places || pro != SharedStore.isPro else { return }
+        SharedStore.places = shared
+        SharedStore.isPro = pro
+        WidgetCenter.shared.reloadAllTimelines()
     }
 
     static let notify: (Forecast, NotificationRules, TempUnit, Bool) -> Void = { f, rules, unit, pro in
