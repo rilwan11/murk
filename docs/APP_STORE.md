@@ -65,9 +65,10 @@ Submit both products with the app version that first contains the paywall.
 Open-Meteo's free endpoint is for non-commercial use. Before Murk Pro is sold:
 
 1. Buy an Open-Meteo commercial plan (or license another provider) and confirm it covers forecast and air quality for a paid app.
-2. Confirm the terms for NWS alerts (US government data) and for anything added later (radar, historical).
-3. Supply the key at build time: set the `MURK_WEATHER_API_KEY` build setting (for example in an untracked `.xcconfig`). With a key, Murk uses the commercial hosts automatically; without one it uses the free endpoint. Do not commit the key. A key shipped inside an app can be extracted, so use a plan with usage caps or put a proxy in front of it.
-4. Watch usage and cost: `WeatherRepository.onEvent` reports each request's kind, success and duration (no coordinates) and is the place to attach monitoring.
+2. Confirm the terms for NWS alerts (US government data) and for anything added later (historical).
+3. **Radar (RainViewer):** the free Weather Maps API is for personal and educational use, needs the visible credit "Weather data by RainViewer" linking to rainviewer.com (shown under the map), and since January 2026 gives only the past 2 hours, zoom 7 and one color scheme. A paid app needs RainViewer's commercial terms (arranged case by case) or another radar source. A different source plugs in by changing `RadarService.catalog()` and `tileURL`.
+4. Supply the key at build time: set the `MURK_WEATHER_API_KEY` build setting (for example in an untracked `.xcconfig`). With a key, Murk uses the commercial hosts automatically; without one it uses the free endpoint. Do not commit the key. A key shipped inside an app can be extracted, so use a plan with usage caps or put a proxy in front of it.
+5. Watch usage and cost: `WeatherRepository.onEvent` reports each request's kind, success and duration (no coordinates) and is the place to attach monitoring.
 
 A different provider plugs in by adding a `ProviderConfig` and, if its response format differs, a parser next to `WeatherAPI.parseForecast`.
 
@@ -113,6 +114,10 @@ Code (done in this repository, verified by CI unless noted):
 - [x] Privacy policy, Terms of Use, privacy manifests
 - [x] Unit tests and CI
 - [x] Pro features: all places at a glance, widgets for a chosen city, widget styles, tinted app icons (unit tested; not yet tried on a device)
+- [x] Rain countdown Live Activity (Lock Screen and Dynamic Island), Murk Pro, starts only while Murk is open and rain changes within the hour
+- [x] Radar map on the Rain page (past 2 hours), with RainViewer credit
+- [x] Apple Watch app (Now, Rain, Moon) and Rain and Moon complications, standalone (scheme MurkWatch)
+- [x] Widget render tests: every widget is drawn from a sample forecast on CI and the build fails if one is blank
 - [ ] iCloud sync switched on and tested on two devices (section 7)
 - [ ] Purchases exercised end to end (needs the StoreKit configuration in Xcode or a sandbox account; not run on CI)
 - [ ] Tested on a physical iPhone after these changes
@@ -128,7 +133,13 @@ Owner actions before submission:
 
 Built but switched off in this build: **iCloud sync** (see section 7). Do not advertise it until it is on and tested on two devices.
 
-Not built (do not advertise): Live Activities, historical forecasts, radar.
+Not built (do not advertise): historical forecasts, future (nowcast) radar.
+
+Live Activity limits to state in marketing: the countdown starts when Murk is open; background refreshes keep it current when iOS runs them, but there is no push server, so it can lag.
+
+## 9. Apple Watch
+
+The watch app is a separate, watch-only app (`WKWatchOnly`), bundle ID `com.rilwan11.murk.watch`. Run it from Xcode with the **MurkWatch** scheme and your watch as the destination. It is not embedded in the iPhone app, so installing Murk on the iPhone doesn't install it on the watch. To ship it alongside the iPhone app later, embed `MurkWatch` in the `Murk` target and set `WKCompanionAppBundleIdentifier` to `com.rilwan11.murk`.
 
 ## 7. Turning on iCloud sync — **OWNER**
 

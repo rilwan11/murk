@@ -27,6 +27,7 @@ struct SettingsSheet: View {
                 locationsSection
                 preferencesSection
                 notificationsSection
+                commuteSection
                 proSection
                 iconSection
                 cloudSection
@@ -237,6 +238,7 @@ struct SettingsSheet: View {
             if state.rules.uv && state.isPro {
                 Stepper("At UV \(Int(state.rules.uvLevel)) or more", value: $state.rules.uvLevel, in: 3...11, step: 1).font(.footnote)
             }
+            liveActivityToggle
             if notificationsBlocked {
                 Button("Notifications are off for Murk. Open Settings to allow them.") {
                     if let u = URL(string: UIApplication.openSettingsURLString) { openURL(u) }
@@ -245,6 +247,32 @@ struct SettingsSheet: View {
             }
         } header: { header("Notify me about") } footer: {
             Text("Notifications are for the place Murk is showing. They are checked when Murk refreshes, including in the background when iOS allows, so they can arrive late. Official alerts come from the US National Weather Service.")
+        }
+        .tint(state.skin.accent)
+    }
+
+    private var liveActivityToggle: some View {
+        Toggle(isOn: Binding(get: { state.rainLiveActivity && state.isPro }, set: { on in
+            if on && !state.isPro { state.paywall = .alerts; return }
+            state.rainLiveActivity = on
+        })) {
+            HStack {
+                Label("Rain countdown on Lock Screen", systemImage: "timer")
+                if !state.isPro { Text("PRO").font(.mono(9)).padding(.horizontal, 5).padding(.vertical, 2).overlay(Capsule().stroke(.secondary)) }
+            }
+        }
+    }
+
+    private var commuteSection: some View {
+        Section {
+            Stepper(value: $state.commute.morning, in: 4...12) {
+                Label("Leave at \(CommuteTimes.label(state.commute.morning))", systemImage: "sunrise")
+            }
+            Stepper(value: $state.commute.evening, in: 12...23) {
+                Label("Head home at \(CommuteTimes.label(state.commute.evening))", systemImage: "sunset")
+            }
+        } header: { header("Commute") } footer: {
+            Text("The Rain page checks the hour after each time.")
         }
         .tint(state.skin.accent)
     }

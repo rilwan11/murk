@@ -173,3 +173,32 @@ final class RainNowTests: XCTestCase {
         XCTAssertTrue(v.line.hasPrefix("Rain possible this hour"), v.line)
     }
 }
+
+final class RadarTests: XCTestCase {
+    func testParsesFramesOldestFirst() throws {
+        let json = #"{"version":"2.0","generated":1,"host":"https://tilecache.rainviewer.com","radar":{"past":[{"time":1700000600,"path":"/v2/radar/b"},{"time":1700000000,"path":"/v2/radar/a"}],"nowcast":[]}}"#
+        let c = try RadarService.parse(Data(json.utf8))
+        XCTAssertEqual(c.host, "https://tilecache.rainviewer.com")
+        XCTAssertEqual(c.frames.map(\.path), ["/v2/radar/a", "/v2/radar/b"])
+        XCTAssertEqual(RadarService.tileURL(host: c.host, path: "/v2/radar/a", z: 5, x: 3, y: 9)?.absoluteString,
+                       "https://tilecache.rainviewer.com/v2/radar/a/256/5/3/9/2/1_1.png")
+    }
+
+    func testCloseTilesAreCutFromZoomSeven() {
+        let s = RadarService.source(z: 9, x: 87, y: 205)
+        XCTAssertEqual(s.z, 7); XCTAssertEqual(s.x, 21); XCTAssertEqual(s.y, 51)
+        XCTAssertEqual(s.rect.minX, 0.75, accuracy: 1e-9)
+        XCTAssertEqual(s.rect.minY, 0.25, accuracy: 1e-9)
+        XCTAssertEqual(s.rect.width, 0.25, accuracy: 1e-9)
+        let same = RadarService.source(z: 6, x: 10, y: 20)
+        XCTAssertEqual(same.z, 6); XCTAssertEqual(same.x, 10); XCTAssertEqual(same.rect.width, 1)
+    }
+
+    func testCommuteWindowsFollowSettings() {
+        let c = CommuteTimes(morning: 7, evening: 18)
+        XCTAssertEqual(c.windows.map { [$0.0, $0.1] }, [[7, 8], [18, 19]])
+        let d = Fixture.defaults()
+        c.save(d)
+        XCTAssertEqual(CommuteTimes.load(d), c)
+    }
+}

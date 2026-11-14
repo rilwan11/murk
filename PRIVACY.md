@@ -22,9 +22,14 @@ Murk talks directly to these services over HTTPS. There is no Murk server in bet
 
 - **Open-Meteo** (forecast and air quality): receives the rounded coordinates of the place being shown. <https://open-meteo.com/en/terms>
 - **US National Weather Service, api.weather.gov** (official alerts): receives the rounded coordinates of the place being shown. <https://www.weather.gov/privacy>
+- **RainViewer** (the radar map on the Rain page): receives requests for the map tiles around the place being shown, which reveal the area (roughly 100–300 km across), not an exact position. <https://www.rainviewer.com/privacy.html>
 - **Apple** (App Store purchases, and Apple's own city search and place names): governed by Apple's privacy policy. <https://www.apple.com/legal/privacy/>
 
 Like any internet request, these services can see your IP address. Murk sends no name, email address, device identifier or advertising identifier, and does not combine your data with data from other apps or sites.
+
+The **Apple Watch app** works on its own: it asks the watch for your location (When In Use), rounds it to about 1 km, and sends that to Open-Meteo for the forecast. It keeps the last forecast on the watch for its complications.
+
+The **rain countdown** on the Lock Screen is drawn on your phone from the forecast Murk already has. No push service is involved.
 
 ## What stays on your phone
 

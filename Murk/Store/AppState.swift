@@ -19,6 +19,8 @@ final class AppState: ObservableObject {
         var notify: (Forecast, NotificationRules, TempUnit, Bool) -> Void = LiveEffects.notify
         /// Saved cities and Pro status, for widgets pinned to a city.
         var shareLibrary: ([Place], Bool) -> Void = LiveEffects.shareLibrary
+        /// The rain countdown on the Lock Screen.
+        var liveActivity: (Forecast?, Bool) -> Void = LiveEffects.liveActivity
     }
 
     // Places
@@ -55,6 +57,9 @@ final class AppState: ObservableObject {
     @Published var sound: Bool { didSet { defaults.set(sound, forKey: "sound"); SoundEngine.shared.enabled = sound } }
     @Published var approximateLocation: Bool { didSet { SharedStore.approximateLocation = approximateLocation } }
     @Published var rules: NotificationRules { didSet { rules.save(defaults) } }
+    @Published var commute: CommuteTimes { didSet { commute.save(defaults) } }
+    /// Show a Lock Screen countdown when rain is about to start or stop (Murk Pro).
+    @Published var rainLiveActivity: Bool { didSet { defaults.set(rainLiveActivity, forKey: "rainLiveActivity"); syncLiveActivity() } }
     @Published private(set) var isPro: Bool
 
     private let defaults: UserDefaults
@@ -90,6 +95,8 @@ final class AppState: ObservableObject {
         sound = defaults.object(forKey: "sound") as? Bool ?? true
         approximateLocation = SharedStore.approximateLocation
         rules = NotificationRules.load(defaults)
+        commute = CommuteTimes.load(defaults)
+        rainLiveActivity = defaults.object(forKey: "rainLiveActivity") as? Bool ?? true
         isPro = defaults.bool(forKey: ProStatus.cacheKey)
         SoundEngine.shared.enabled = sound
     }
@@ -102,6 +109,7 @@ final class AppState: ObservableObject {
     func setPro(_ pro: Bool) {
         isPro = pro
         effects.shareLibrary(places, pro)
+        syncLiveActivity()
         guard !pro else { return }
         // Pro-only looks fall back to free ones. Saved cities are kept.
         if autoSkin { autoSkin = false }
@@ -401,6 +409,11 @@ final class AppState: ObservableObject {
     /// Hands the current forecast, place and look to the widgets.
     private func syncWidget() {
         effects.syncWidget(forecast, forecast?.place ?? activePlace, unit, skin)
+        syncLiveActivity()
+    }
+
+    func syncLiveActivity() {
+        effects.liveActivity(forecast, rainLiveActivity && isPro)
     }
 
     private func savePlaces() {
@@ -503,6 +516,10 @@ enum LiveEffects {
         SharedStore.places = shared
         SharedStore.isPro = pro
         WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    static let liveActivity: (Forecast?, Bool) -> Void = { f, on in
+        Task { @MainActor in RainLiveActivity.sync(f, enabled: on) }
     }
 
     static let notify: (Forecast, NotificationRules, TempUnit, Bool) -> Void = { f, rules, unit, pro in

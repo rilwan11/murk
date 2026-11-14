@@ -102,8 +102,16 @@ private struct WindChart: View {
         let u = state.unit
         let hours = Array(forecast.hourly.filter { $0.time.addingTimeInterval(3600) > Date() }.prefix(24))
         let arrows = hours.enumerated().filter { $0.offset % 3 == 0 }.map(\.element)
-        let top = (hours.map { u.windValue($0.windGust ?? $0.windSpeed) }.max() ?? 10) * 1.25 + 2
-        Chart {
+        let top = (hours.map { u.windValue($0.windGust ?? $0.windSpeed) }.max() ?? 10) * 1.1 + 2
+        VStack(spacing: 10) {
+            chart(hours: hours, top: top, p: p)
+            WindDirections(hours: arrows, palette: p, timeZone: forecast.timeZone)
+        }
+    }
+
+    private func chart(hours: [HourlyPoint], top: Double, p: Palette) -> some View {
+        let u = state.unit
+        return Chart {
             ForEach(hours) { h in
                 AreaMark(x: .value("Hour", h.time, unit: .hour),
                          yStart: .value("Speed", u.windValue(h.windSpeed)),
@@ -111,14 +119,6 @@ private struct WindChart: View {
                     .foregroundStyle(p.ink.opacity(0.18)).interpolationMethod(.catmullRom)
                 LineMark(x: .value("Hour", h.time, unit: .hour), y: .value("Speed", u.windValue(h.windSpeed)))
                     .foregroundStyle(p.ink).interpolationMethod(.catmullRom).lineStyle(StrokeStyle(lineWidth: 2.5))
-            }
-            ForEach(arrows) { h in
-                PointMark(x: .value("Hour", h.time, unit: .hour), y: .value("Top", top * 0.93))
-                    .symbol {
-                        Image(systemName: "location.north.fill").font(.system(size: 10, weight: .bold))
-                            .rotationEffect(.degrees(h.windDirection + 180))
-                            .foregroundStyle(p.muted)
-                    }
             }
             if let sel = state.selectedHourPoint {
                 RuleMark(x: .value("Selected", sel.time, unit: .hour)).foregroundStyle(p.ink.opacity(0.6))
@@ -135,7 +135,47 @@ private struct WindChart: View {
         } }
         .frame(height: 140)
         .padding(.horizontal, 12)
-        .accessibilityLabel(Text("Wind speed and gusts for the next 24 hours, with direction arrows"))
+        .accessibilityLabel(Text("Wind speed and gusts for the next 24 hours"))
+    }
+}
+
+/// Every third hour: an arrow pointing where the wind is going, and the direction it comes from.
+private struct WindDirections: View {
+    let hours: [HourlyPoint]
+    let palette: Palette
+    let timeZone: TimeZone
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 0) {
+                ForEach(hours) { h in column(h) }
+            }
+            Text("Arrows point where the wind blows. Letters say where it comes from.")
+                .font(.mono(9)).foregroundStyle(palette.muted)
+                .padding(.horizontal, 12)
+        }
+    }
+
+    private func column(_ h: HourlyPoint) -> some View {
+        VStack(spacing: 4) {
+            Image(systemName: "arrow.up")
+                .font(.system(size: 15, weight: .heavy))
+                .rotationEffect(.degrees(h.windDirection + 180))
+                .foregroundStyle(palette.ink)
+                .frame(width: 26, height: 26)
+                .background(Circle().fill(palette.ink.opacity(0.1)))
+            Text(h.windDirection.compassDirection).font(.mono(10, .bold)).foregroundStyle(palette.ink)
+            Text(hourText(h.time)).font(.mono(9)).foregroundStyle(palette.muted)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("\(hourText(h.time)), wind from \(h.windDirection.compassDirection)"))
+    }
+
+    private func hourText(_ d: Date) -> String {
+        var f = Date.FormatStyle.dateTime.hour()
+        f.timeZone = timeZone
+        return d.formatted(f)
     }
 }
 

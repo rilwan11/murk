@@ -37,7 +37,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Murk.xcodeproj Murk/Info.plist MurkWidget/Info.plist
+          git add Murk.xcodeproj Murk/Info.plist MurkWidget/Info.plist MurkWatch/Info.plist MurkWatchWidget/Info.plist
           if ! git diff --cached --quiet; then
             git commit -m "Regenerate Xcode project [skip ci]"
             git push
@@ -86,6 +86,13 @@ jobs:
         if: steps.build.outcome == 'failure'
         run: exit 1
 
+      - name: Build the Apple Watch app (no signing)
+        run: |
+          set -o pipefail
+          xcodebuild build -project Murk.xcodeproj -scheme MurkWatch \
+            -destination "generic/platform=watchOS Simulator" -configuration Debug -derivedDataPath DerivedData \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO 2>&1 | tee watch.log | grep -E "error:|BUILD (SUCCEEDED|FAILED)" | sort -u | tail -60
+
       - name: Unit tests
         id: test
         continue-on-error: true
@@ -115,6 +122,7 @@ jobs:
           name: logs
           path: |
             build.log
+            watch.log
             errors.txt
             test.log
             test-summary.txt

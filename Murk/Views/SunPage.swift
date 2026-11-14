@@ -18,10 +18,10 @@ struct SunView: View {
         let f = state.forecast
         PageScaffold(title: String(localized: "Sun"), page: 3, verdict: f.map { Verdicts.sun($0, now: now) }) {
             Hero3DView(hero: hero, active: active, label: heroLabel(now))
-                .onAppear { updateHero(now) }
                 .onChange(of: state.selectedHour) { _, _ in updateHero(now) }
                 .onChange(of: state.forecast?.place.id) { _, _ in updateHero(now); year = [] }
-                .onChange(of: now) { _, n in updateHero(n) }
+                // Once a minute, keyed by the minute: an onChange on the timeline's date can fire twice in one frame.
+                .task(id: Int(now.timeIntervalSince1970 / 60)) { updateHero(now) }
         } extra: {
             EmptyView()
         } cards: {

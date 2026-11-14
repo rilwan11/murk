@@ -136,17 +136,6 @@ enum WidgetLoader {
 
 // MARK: - Widget
 
-@main
-struct MurkWidgetBundle: WidgetBundle {
-    var body: some Widget {
-        MurkWeatherWidget()
-        MurkRainWidget()
-        MurkAirWidget()
-        MurkDaylightWidget()
-        MurkMoonWidget()
-    }
-}
-
 struct MurkWeatherWidget: Widget {
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: "MurkWeather", intent: MurkWidgetIntent.self, provider: Provider()) { entry in

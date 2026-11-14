@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### New
+- **Rain countdown on the Lock Screen and in the Dynamic Island** (Murk Pro): when rain is due to start or stop within the hour, a live timer and the next two hours as bars. Settings › Notify me about › Rain countdown.
+- **Radar map** on the Rain page: the past two hours, looping. Tap it for a full-screen map with a time scrubber.
+- **Apple Watch app:** Now, Rain and Moon pages, plus Rain and Moon complications.
+- **Commute times** in Settings: the Rain page's commute check uses your own hours.
+- Air page: wind direction is now a row of large arrows with compass letters under the chart.
+- Sun page: no more "onChange tried to update multiple times per frame" warning.
+- CI draws every widget and fails if one comes out blank.
+
 ### Reliability
 - **Sound:** fixed a data race between the screen and the audio thread. Sound now recovers on its own when headphones or Bluetooth connect or disconnect.
 - **Widget taps:** tapping any widget opens Murk on the Now page. `murk://now`, `air`, `rain`, `sun`, `moon` and `settings` are supported; anything else is ignored.

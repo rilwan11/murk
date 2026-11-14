@@ -31,13 +31,14 @@ struct RainView: View {
                     CardTitle(text: String(localized: "Next 24 hours"), trailing: String(localized: "bars: amount · line: chance"))
                     Next24Chart(forecast: f)
                 }
+                GlassCard { RadarCard(place: f.place) }
                 GlassCard {
                     CardTitle(text: String(localized: "This week"), trailing: day == nil ? nil : String(localized: "tap again for now"))
                     WeekRain(forecast: f, selected: $day)
                 }
                 GlassCard {
-                    CardTitle(text: String(localized: "Commute check"))
-                    ForEach(Array(Verdicts.commute(f).enumerated()), id: \.offset) { _, row in
+                    CardTitle(text: String(localized: "Commute check"), trailing: String(localized: "change in Settings"))
+                    ForEach(Array(Verdicts.commute(f, windows: state.commute.windows).enumerated()), id: \.offset) { _, row in
                         DetailRow(label: row.0, value: row.1, highlighted: row.1 != String(localized: "Dry"))
                     }
                 }

@@ -18,7 +18,7 @@ struct PaywallView: View {
         switch reason {
         case .city: return String(localized: "Saving more than one city is part of Murk Pro.")
         case .skin: return String(localized: "This skin is part of Murk Pro.")
-        case .alerts: return String(localized: "Rain, wind, UV and air-quality alerts are part of Murk Pro.")
+        case .alerts: return String(localized: "Rain, wind, UV and air-quality alerts, and the rain countdown, are part of Murk Pro.")
         case .overview: return String(localized: "Seeing all your places at a glance is part of Murk Pro.")
         case .icon: return String(localized: "This app icon is part of Murk Pro.")
         case .sync: return String(localized: "Syncing cities and settings with iCloud is part of Murk Pro.")
@@ -33,7 +33,7 @@ struct PaywallView: View {
         ("exclamationmark.triangle.fill", "Official weather alerts", "", true),
         ("mappin.and.ellipse", "Unlimited saved cities", "", false),
         ("paintpalette.fill", "Aurora, Storm and Sunset skins, plus Auto", "", false),
-        ("bell.badge.fill", "Alerts for rain, wind, UV and air quality", "", false),
+        ("bell.badge.fill", "Alerts for rain, wind, UV and air quality, and a Lock Screen rain countdown", "", false),
         ("rectangle.stack.fill", "All places at a glance, with local times", "", false),
         ("square.grid.2x2", "Widgets for any saved city, and widget styles", "", false),
         ("app.badge.fill", "Aurora, Storm and Sunset app icons", "", false),
