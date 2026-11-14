@@ -47,7 +47,9 @@ struct PageWidgetFrame<Content: View>: View {
         .environment(\.widgetPalette, p)
         .environment(\.widgetSky, sky)
         .containerBackground(for: .widget) {
-            if let sky { SkyBackground(sky: sky) } else { entry.skin.bg }
+            // Clear and Tinted home screens: no fill at all, so the system glass shows the wallpaper
+            // like every other widget (a solid fill gets tinted into a flat slab there).
+            if accented { Color.clear } else if let sky { SkyBackground(sky: sky) } else { entry.skin.bg }
         }
         .widgetURL(URL(string: link))
     }

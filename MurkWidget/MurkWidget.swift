@@ -215,8 +215,9 @@ struct WidgetView: View {
         .environment(\.widgetPalette, p)
         .environment(\.widgetSky, sky)
         .containerBackground(for: .widget) {
-            // Shown only on a full-color home screen; Clear and Tinted replace it with glass.
-            if let sky { SkyBackground(sky: sky) } else { entry.skin.bg }
+            // Clear and Tinted home screens: no fill at all, so the system glass shows the wallpaper
+            // like every other widget (a solid fill gets tinted into a flat slab there).
+            if accented { Color.clear } else if let sky { SkyBackground(sky: sky) } else { entry.skin.bg }
         }
         .widgetURL(URL(string: "murk://now"))
     }
