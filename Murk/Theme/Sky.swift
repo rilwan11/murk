@@ -108,12 +108,16 @@ struct Palette {
     let bright: Bool
 
     init(skin: Skin, sky: Sky?) {
+        // Reduce Transparency: cards become nearly solid.
+        let solid = UIAccessibility.isReduceTransparencyEnabled
         if let sky {
-            ink = sky.ink; muted = sky.muted; line = sky.line; glass = sky.glass
+            ink = sky.ink; muted = sky.muted; line = sky.line
+            glass = solid ? (sky.bright ? Color.white.opacity(0.92) : Color.black.opacity(0.7)) : sky.glass
             onInk = sky.bright ? .white : Color(hex: 0x13233D); bright = sky.bright
         } else {
             ink = skin.ink; muted = skin.muted; line = skin.line
-            glass = skin.isLight ? Color.white.opacity(0.35) : Color.white.opacity(0.06)
+            glass = solid ? (skin.isLight ? Color.white.opacity(0.9) : Color.black.opacity(0.6))
+                          : (skin.isLight ? Color.white.opacity(0.35) : Color.white.opacity(0.06))
             onInk = skin.bg; bright = skin.isLight
         }
     }
@@ -141,5 +145,27 @@ extension Sky {
             let c = CGPoint(x: size.width / 2, y: size.height)
             r.cgContext.drawRadialGradient(glowG, startCenter: c, startRadius: 0, endCenter: c, endRadius: size.height, options: [])
         }
+    }
+}
+
+/// True for the page that is on screen while the app is active. Animations elsewhere pause.
+private struct PageActiveKey: EnvironmentKey { static let defaultValue = true }
+extension EnvironmentValues {
+    var pageActive: Bool {
+        get { self[PageActiveKey.self] }
+        set { self[PageActiveKey.self] = newValue }
+    }
+}
+
+/// WCAG contrast between two colors (1 = none, 21 = black on white). Used to check every skin and sky.
+enum Contrast {
+    static func luminance(_ hex: UInt32) -> Double {
+        func f(_ v: Double) -> Double { v <= 0.03928 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+        let r = Double((hex >> 16) & 0xFF) / 255, g = Double((hex >> 8) & 0xFF) / 255, b = Double(hex & 0xFF) / 255
+        return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+    }
+    static func ratio(_ a: UInt32, _ b: UInt32) -> Double {
+        let la = luminance(a), lb = luminance(b)
+        return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
     }
 }

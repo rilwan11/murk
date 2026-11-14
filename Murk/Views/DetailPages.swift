@@ -21,6 +21,7 @@ struct DayPicker: View {
                         withAnimation(.easeInOut(duration: 0.2)) { selected = i }
                         UISelectionFeedbackGenerator().selectionChanged()
                     }
+                    .accessibilityAddTraits(i == selected ? [.isButton, .isSelected] : .isButton)
             }
         }
         .padding(.horizontal, 6).padding(.top, 6)
@@ -73,6 +74,8 @@ struct AirView: View {
         DetailScroll {
             Anemometer(speedKmh: (today ? f?.current.windSpeed : d?.windMax) ?? 0,
                        direction: today ? f?.current.windDirection : nil)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text("Wind gauge"))
         } content: {
             PageTitle(text: "Air")
             GlassCard {
@@ -110,6 +113,26 @@ struct AirView: View {
                 DayPicker(selected: $sel)
                 Note(text: "Solid: max wind · dashed: max gust (\(u.windLabel))")
                 }
+                .accessibilityElement(children: .contain)
+
+                let next = Array(f.hourly.filter { $0.time >= Date().addingTimeInterval(-3600) }.prefix(24))
+                if next.count > 2 {
+                    GlassCard {
+                        SectionLabel(text: "WIND · NEXT 24 HOURS")
+                        Chart(next) { h in
+                            if let g = h.windGust {
+                                LineMark(x: .value("Time", h.time), y: .value("Wind", u.windValue(g)), series: .value("S", "Gust"))
+                                    .foregroundStyle(p.muted).lineStyle(StrokeStyle(lineWidth: 2, dash: [4, 4])).interpolationMethod(.catmullRom)
+                            }
+                            LineMark(x: .value("Time", h.time), y: .value("Wind", u.windValue(h.windSpeed)), series: .value("S", "Wind"))
+                                .foregroundStyle(p.ink).lineStyle(StrokeStyle(lineWidth: 3, lineCap: .round)).interpolationMethod(.catmullRom)
+                        }
+                        .chartXAxis { AxisMarks(values: .stride(by: .hour, count: 6)) { _ in AxisValueLabel(format: .dateTime.hour()).font(.mono(10)).foregroundStyle(p.muted) } }
+                        .chartYAxis { AxisMarks(position: .trailing) { _ in AxisValueLabel().font(.mono(10)).foregroundStyle(p.muted) } }
+                        .frame(height: 100).padding(.horizontal, 10).padding(.bottom, 4)
+                        .accessibilityLabel(Text("Wind over the next 24 hours"))
+                    }
+                }
             }
         }
     }
@@ -119,13 +142,15 @@ struct AirView: View {
 struct Anemometer: View {
     @EnvironmentObject var state: AppState
     @Environment(\.sky) private var sky
+    @Environment(\.pageActive) private var pageActive
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let speedKmh: Double
     let direction: Double?
 
     var body: some View {
-        TimelineView(.animation) { tl in
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: !pageActive || reduceMotion)) { tl in
             Canvas { ctx, size in
-                let t = tl.date.timeIntervalSinceReferenceDate
+                let t = reduceMotion ? 0 : tl.date.timeIntervalSinceReferenceDate
                 let spin = CGFloat(t * max(0.4, speedKmh * 0.12))
                 let cx = size.width / 2, top = size.height * 0.28, R = min(size.width * 0.32, 120.0), tilt: CGFloat = 0.34
                 let skin = state.skin
@@ -185,6 +210,8 @@ struct RainView: View {
         let d = f.flatMap { sel < $0.daily.count ? $0.daily[sel] : nil }
         DetailScroll {
             RainGauge(level: Double(d?.precipChance ?? 0) / 100)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text("Rain gauge, \(d?.precipChance ?? 0) percent chance"))
         } content: {
             PageTitle(text: "Rain")
             GlassCard {
@@ -313,6 +340,8 @@ struct SunView: View {
             DetailScroll {
                 SunArc(fraction: frac, altitude: alt ?? -10, peak: peak ?? 60, rising: rising,
                        riseText: state.time(rise), setText: state.time(set))
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(Text("The sun's path today. Sunrise \(state.time(rise)), sunset \(state.time(set))."))
             } content: {
                 PageTitle(text: "Sun")
                 GlassCard {
@@ -364,6 +393,8 @@ private struct SunsetWeek: View {
 struct SunArc: View {
     @EnvironmentObject var state: AppState
     @Environment(\.sky) private var sky
+    @Environment(\.pageActive) private var pageActive
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let fraction: Double?
     let altitude: Double
     let peak: Double
@@ -372,10 +403,10 @@ struct SunArc: View {
     let setText: String
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30)) { tl in
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: !pageActive || reduceMotion)) { tl in
             Canvas { ctx, size in
                 let p = Palette(skin: state.skin, sky: sky)
-                let t = tl.date.timeIntervalSinceReferenceDate
+                let t = reduceMotion ? 0 : tl.date.timeIntervalSinceReferenceDate
                 let r = min(size.width * 0.4, 150.0), c = CGPoint(x: size.width / 2, y: size.height * 0.74)
                 let warm = Gradient(stops: [.init(color: Color(hex: 0xFF8F3A), location: 0), .init(color: Color(hex: 0xFFD54D), location: 0.5),
                                             .init(color: Color(hex: 0xEE4028), location: 1)])
@@ -442,6 +473,8 @@ struct SunArc: View {
 struct MoonView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.sky) private var sky
+    @Environment(\.pageActive) private var pageActive
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 300)) { tl in
@@ -466,7 +499,11 @@ struct MoonView: View {
                     }
                     // By day the sky behind the moon sits about a third of the way down the gradient.
                     MoonOrbView(age: age, tint: state.skin.moonHex,
-                                daySky: sky.flatMap { $0.bright ? Sky.lerp($0.top, $0.mid, 0.45) : nil })
+                                daySky: sky.flatMap { $0.bright ? Sky.lerp($0.top, $0.mid, 0.45) : nil },
+                                active: pageActive, calm: reduceMotion)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityAddTraits(.isImage)
+                        .accessibilityLabel(Text("The moon, \(Astronomy.phaseName(age: age)), \(Int((k * 100).rounded())) percent lit"))
                         .frame(width: 280, height: 280)
                         .noPageSwipe(page: 4)
                 }

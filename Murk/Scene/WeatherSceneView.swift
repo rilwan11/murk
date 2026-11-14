@@ -27,6 +27,10 @@ struct SceneConfig: Equatable {
 /// including fully over the top and underneath. Pinch zooms. Tap grows new clouds.
 struct WeatherSceneView: UIViewRepresentable {
     var config: SceneConfig
+    /// False while the page is off screen or the app is inactive: rendering stops.
+    var active = true
+    /// Reduce Motion: no drifting, swaying or pulsing.
+    var calm = false
     var onThunder: (() -> Void)? = nil
     var onTap: (() -> Void)? = nil
 
@@ -39,8 +43,8 @@ struct WeatherSceneView: UIViewRepresentable {
         v.pointOfView = scene.cameraNode
         v.backgroundColor = .clear
         v.antialiasingMode = .multisampling4X
-        v.rendersContinuously = true
-        v.preferredFramesPerSecond = 60
+        v.rendersContinuously = false
+        v.preferredFramesPerSecond = 30
         v.allowsCameraControl = true
         v.defaultCameraController.interactionMode = .orbitArcball   // no up/down limit
         v.defaultCameraController.inertiaEnabled = true
@@ -48,19 +52,63 @@ struct WeatherSceneView: UIViewRepresentable {
         v.defaultCameraController.target = WeatherScene.target
         let tap = UITapGestureRecognizer(target: scene, action: #selector(WeatherScene.tapped))
         v.addGestureRecognizer(tap)
+        // Full frame rate only while a finger is on the scene (and briefly after, for the spin to settle).
+        let touch = UILongPressGestureRecognizer(target: scene, action: #selector(WeatherScene.touched(_:)))
+        touch.minimumPressDuration = 0
+        touch.cancelsTouchesInView = false
+        touch.delegate = scene
+        v.addGestureRecognizer(touch)
         scene.view = v
+        scene.calm = calm
         scene.apply(config, force: true)
+        scene.setActive(active)
         return v
     }
 
     func updateUIView(_ v: SCNView, context: Context) {
         context.coordinator.onThunder = onThunder
         context.coordinator.onTap = onTap
-        context.coordinator.apply(config)
+        let motionChanged = context.coordinator.calm != calm
+        context.coordinator.calm = calm
+        context.coordinator.apply(config, force: motionChanged)
+        context.coordinator.setActive(active)
     }
 }
 
-final class WeatherScene: NSObject {
+final class WeatherScene: NSObject, UIGestureRecognizerDelegate {
+    var calm = false
+    private var isActive = true
+    private var settle: DispatchWorkItem?
+
+    /// Stops or resumes drawing. A paused scene uses no GPU.
+    func setActive(_ on: Bool) {
+        guard on != isActive || view?.isPlaying != on else { return }
+        isActive = on
+        scene.isPaused = !on
+        view?.isPlaying = on
+        if on { applyFrameRate() }
+    }
+
+    /// 30 fps for drifting clouds; 60 for rain, snow and storms, or while being spun.
+    private func applyFrameRate(interacting: Bool = false) {
+        let busy = (last?.precip ?? .none) != .none || last?.thunder == true
+        view?.preferredFramesPerSecond = (interacting || busy) && !calm ? 60 : 30
+    }
+
+    @objc func touched(_ g: UIGestureRecognizer) {
+        settle?.cancel()
+        switch g.state {
+        case .began, .changed:
+            applyFrameRate(interacting: true)
+        default:
+            let work = DispatchWorkItem { [weak self] in self?.applyFrameRate() }
+            settle = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: work)
+        }
+    }
+
+    func gestureRecognizer(_ g: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+
     static let target = SCNVector3(0, 0.4, 0)
     static let home = SCNVector3(0, 0.4, 11.8)
 
@@ -207,6 +255,7 @@ final class WeatherScene: NSObject {
         if force || p?.thunder != c.thunder { setThunder(c.thunder) }
         if let p, p.resetToken != c.resetToken { resetCamera(animated: true) }
         last = c
+        applyFrameRate()
     }
 
     /// Renders just the sky (clouds + sun or moon, no digits or rain) to a still image, for widgets.
@@ -351,7 +400,7 @@ final class WeatherScene: NSObject {
         let toward = (dir + 180) * Double.pi / 180
         let xs = Float(sin(toward)) * Float(w)              // east-west push on screen
         cloudNode.removeAction(forKey: "wind")
-        if w > 0.05 {
+        if w > 0.05 && !calm {
             let amp = CGFloat(0.12 + 0.45 * w) * (xs >= 0 ? 1 : -1)
             let d = 7.0 / (0.4 + w)
             let sway = SCNAction.sequence([.moveBy(x: amp, y: 0, z: 0, duration: d), .moveBy(x: -amp, y: 0, z: 0, duration: d)])
@@ -476,7 +525,7 @@ final class WeatherScene: NSObject {
             let d = Double.random(in: 2.4...3.6)
             let drift = SCNAction.sequence([.moveBy(x: 0, y: 0.05, z: 0, duration: d), .moveBy(x: 0, y: -0.05, z: 0, duration: d)])
             drift.timingMode = .easeInEaseOut
-            n.runAction(.repeatForever(drift))
+            if !calm { n.runAction(.repeatForever(drift)) }
             cloudNode.addChildNode(n)
         }
     }
@@ -560,7 +609,7 @@ final class WeatherScene: NSObject {
         orbNode.geometry = sphere
         orbNode.removeAction(forKey: "spin")
         orbNode.eulerAngles = SCNVector3(0, isDay ? orbNode.eulerAngles.y : -.pi / 2, 0)   // moon shows its near side
-        if !fixed && isDay { orbNode.runAction(.repeatForever(.rotateBy(x: 0, y: .pi * 2, z: 0, duration: 240)), forKey: "spin") }
+        if !fixed && isDay && !calm { orbNode.runAction(.repeatForever(.rotateBy(x: 0, y: .pi * 2, z: 0, duration: 240)), forKey: "spin") }
     }
 }
 
@@ -589,7 +638,7 @@ extension WeatherScene {
         let bloom = plane(7.5, Self.haloImage, 0.35)
         let pulse = SCNAction.sequence([.scale(to: 1.04, duration: 3.2), .scale(to: 0.97, duration: 3.2)])
         pulse.timingMode = .easeInEaseOut
-        corona.runAction(.repeatForever(pulse))
+        if !calm { corona.runAction(.repeatForever(pulse)) }
         holder.addChildNode(bloom)
         holder.addChildNode(corona)
         // Glow sits behind the sun disc (orb sphere radius 1 inside a 5-wide halo).

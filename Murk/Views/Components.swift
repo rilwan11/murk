@@ -10,11 +10,12 @@ struct DetailRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Text(label).lineLimit(1)
+            Text(label).lineLimit(1).minimumScaleFactor(0.7)
             if highlighted { Spacer(minLength: 8) }
-            else { Rectangle().fill(p.line).frame(height: 1) }
-            Text(value).lineLimit(1)
+            else { Rectangle().fill(p.line).frame(height: 1).accessibilityHidden(true) }
+            Text(value).lineLimit(1).minimumScaleFactor(0.7)
         }
+        .accessibilityElement(children: .combine)
         .font(.mono(14))
         .tracking(1.5)
         .textCase(.uppercase)
@@ -96,5 +97,42 @@ struct GlassCard<Content: View>: View {
             .padding(.vertical, 10).padding(.horizontal, 4)
             .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(p.glass))
             .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(p.line.opacity(0.6), lineWidth: 0.5))
+    }
+}
+
+/// Official alerts in full: what, how serious, until when, and what to do.
+struct AlertSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let alerts: [WeatherAlert]
+    let place: String
+    let time: (Date?) -> String
+
+    var body: some View {
+        NavigationStack {
+            List(alerts) { a in
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(a.event, systemImage: a.isSevere ? "exclamationmark.octagon.fill" : "exclamationmark.triangle.fill")
+                        .font(.headline)
+                    Text("Severity: \(a.severity)").font(.subheadline.weight(.semibold))
+                    if let ends = a.ends {
+                        Text("Until \(ends.formatted(date: .abbreviated, time: .omitted)), \(time(ends))").font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    Text(a.headline).font(.subheadline)
+                    if let i = a.instruction, !i.isEmpty { Text(i).font(.footnote) }
+                    if let d = a.detail, !d.isEmpty { Text(d).font(.footnote).foregroundStyle(.secondary) }
+                }
+                .padding(.vertical, 6)
+            }
+            .navigationTitle(Text("Alerts · \(place)"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { Button("Done") { dismiss() } }
+                ToolbarItem(placement: .bottomBar) {
+                    Text("Issued by the US National Weather Service. Murk checks for alerts when it refreshes, so there can be a delay. Follow local officials in an emergency.")
+                        .font(.caption2).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
     }
 }

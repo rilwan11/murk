@@ -32,9 +32,26 @@ struct Provider: TimelineProvider {
         }
     }
 
+    /// Draws from the snapshot the app shares. The network is used only when there's no usable
+    /// snapshot, and then just once, briefly.
     private func load() async -> WeatherEntry {
-        let f = try? await WeatherService().forecast(for: SharedStore.place)
-        return WeatherEntry(date: .now, forecast: f, unit: SharedStore.unit, skin: SharedStore.skin)
+        let saved = WidgetSnapshot.load()
+        if let s = saved, s.isFresh() { return entry(s) }
+
+        var repo = WeatherRepository()
+        repo.firstTimeout = 8
+        repo.allowRetry = false
+        if let f = try? await repo.core(for: SharedStore.place) {
+            let s = WidgetSnapshot(forecast: f, unit: saved?.tempUnit ?? SharedStore.unit, skin: saved?.skinValue ?? SharedStore.skin)
+            s.save()
+            return entry(s)
+        }
+        if let s = saved, s.isUsable() { return entry(s) }     // offline: the last forecast still beats nothing
+        return WeatherEntry(date: .now, forecast: nil, unit: SharedStore.unit, skin: SharedStore.skin)
+    }
+
+    private func entry(_ s: WidgetSnapshot) -> WeatherEntry {
+        WeatherEntry(date: .now, forecast: s.forecast, unit: s.tempUnit, skin: s.skinValue)
     }
 }
 
@@ -51,7 +68,7 @@ struct MurkWeatherWidget: Widget {
             WidgetView(entry: entry)
         }
         .configurationDisplayName("Murk")
-        .description("The weather, but moodier.")
+        .description("Weather with Atmosphere.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge,
                             .accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
@@ -63,6 +80,16 @@ struct WidgetView: View {
     let entry: WeatherEntry
 
     private var isHome: Bool { [.systemSmall, .systemMedium, .systemLarge].contains(family) }
+
+    /// The whole widget in one sentence for VoiceOver.
+    private var spoken: String {
+        guard let f = entry.forecast else { return String(localized: "Murk. Open the app to load the forecast.") }
+        let u = entry.unit
+        var s = String(localized: "\(f.place.name), \(u.temp(f.current.temperature)) degrees, \(f.current.condition.title)")
+        if let d = f.daily.first { s += String(localized: ". High \(u.temp(d.high)), low \(u.temp(d.low)), \(d.precipChance) percent chance of rain") }
+        if f.isStale() { s += String(localized: ". Updated \(f.fetchedAt.formatted(date: .omitted, time: .shortened))") }
+        return s
+    }
 
     var body: some View {
         // The same live sky as the app (dawn, blue day, golden hour, dusk, navy night, grey under cloud).
@@ -86,11 +113,13 @@ struct WidgetView: View {
             } else {
                 VStack(spacing: 4) {
                     Image(systemName: "icloud.slash")
-                    Text("No forecast").font(.caption2)
+                    Text("Open Murk to load the forecast").font(.caption2).multilineTextAlignment(.center)
                 }
                 .foregroundStyle(p.muted)
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(spoken))
         .background {
             if accented, isHome, let sky { fullColorImage(sky.image()).padding(-60) }
         }

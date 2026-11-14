@@ -1,16 +1,23 @@
-name: Build
+name: Build and test
 
 on:
   push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
+    name: Build app + widget, run unit tests
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -26,7 +33,7 @@ jobs:
           xcodegen
 
       - name: Commit generated Xcode project
-        if: github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -36,38 +43,116 @@ jobs:
             git push
           fi
 
-      - name: Build for iOS Simulator (no signing)
+      - name: Pick a simulator
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+          import sys, json, re
+          d = json.load(sys.stdin)['devices']
+          c = [(k, x) for k, v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone')]
+          c.sort(key=lambda t: [int(n) for n in re.findall(r'\d+', t[0])])
+          print(c[-1][1]['udid'])")
+          echo "SIM=$UDID" >> "$GITHUB_ENV"
+          xcrun simctl list devices available | grep "$UDID" || true
+
+      - name: Build (app, widget, tests; no signing)
+        id: build
+        continue-on-error: true
         run: |
           set -o pipefail
-          xcodebuild -project Murk.xcodeproj -scheme Murk \
-            -destination 'generic/platform=iOS Simulator' \
-            -configuration Debug \
+          xcodebuild build-for-testing -project Murk.xcodeproj -scheme Murk \
+            -destination "id=$SIM" -configuration Debug -derivedDataPath DerivedData \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
-            build 2>&1 | tee build.log
-        continue-on-error: true
-        id: build
+            2>&1 | tee build.log
 
       - name: Report compiler errors
         if: always()
         run: |
           # Turn each compiler error into an annotation (file:line: error: msg)
-          grep -E "^/.+:[0-9]+:[0-9]+: error: " build.log | sort -u | head -60 | while IFS= read -r line; do
+          grep -E "^/.+:[0-9]+:[0-9]+: error: " build.log | sort -u | head -80 | while IFS= read -r line; do
             f=$(echo "$line" | cut -d: -f1 | sed "s|$GITHUB_WORKSPACE/||")
             l=$(echo "$line" | cut -d: -f2)
             m=$(echo "$line" | cut -d: -f5- | sed 's/^ *//')
             echo "::error file=$f,line=$l::$m"
           done
-          grep -E "error:|BUILD (SUCCEEDED|FAILED)" build.log | sort -u | tail -80 > errors.txt || true
+          grep -E "error:|BUILD (SUCCEEDED|FAILED)|TEST BUILD (SUCCEEDED|FAILED)" build.log | sort -u | tail -120 > errors.txt || true
           cat errors.txt
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: build-log
-          path: |
-            build.log
-            errors.txt
 
       - name: Fail if build failed
         if: steps.build.outcome == 'failure'
         run: exit 1
+
+      - name: Unit tests
+        id: test
+        continue-on-error: true
+        run: |
+          set -o pipefail
+          xcodebuild test-without-building -project Murk.xcodeproj -scheme Murk \
+            -destination "id=$SIM" -derivedDataPath DerivedData \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            2>&1 | tee test.log
+
+      - name: Report test failures
+        if: always()
+        run: |
+          touch test.log
+          grep -E "^/.+:[0-9]+: error: " test.log | sort -u | head -60 | while IFS= read -r line; do
+            f=$(echo "$line" | cut -d: -f1 | sed "s|$GITHUB_WORKSPACE/||")
+            l=$(echo "$line" | cut -d: -f2)
+            m=$(echo "$line" | cut -d: -f4- | sed 's/^ *//')
+            echo "::error file=$f,line=$l::$m"
+          done
+          grep -E "error:|Executed [0-9]+ tests|TEST (SUCCEEDED|FAILED|EXECUTE)|Testing failed|crash" test.log | sort -u | tail -120 > test-summary.txt || true
+          cat test-summary.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: logs
+          path: |
+            build.log
+            errors.txt
+            test.log
+            test-summary.txt
+
+      - name: Fail if tests failed
+        if: steps.test.outcome == 'failure'
+        run: exit 1
+
+  ui-tests:
+    name: UI smoke tests
+    runs-on: macos-15
+    timeout-minutes: 45
+    # Simulator UI runs on shared runners are slow and occasionally flaky, so they report without blocking.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pick newest Xcode
+        run: |
+          XC=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          sudo xcode-select -s "$XC"
+      - name: Generate project
+        run: |
+          brew install xcodegen
+          xcodegen
+      - name: Pick a simulator
+        run: |
+          UDID=$(xcrun simctl list devices available -j | python3 -c "
+          import sys, json, re
+          d = json.load(sys.stdin)['devices']
+          c = [(k, x) for k, v in d.items() if 'iOS' in k for x in v if x['name'].startswith('iPhone')]
+          c.sort(key=lambda t: [int(n) for n in re.findall(r'\d+', t[0])])
+          print(c[-1][1]['udid'])")
+          echo "SIM=$UDID" >> "$GITHUB_ENV"
+      - name: UI tests
+        run: |
+          set -o pipefail
+          xcodebuild test -project Murk.xcodeproj -scheme MurkUITests \
+            -destination "id=$SIM" -derivedDataPath DerivedData \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            2>&1 | tee ui-test.log | grep -E "Test Case|error:|Executed|TEST (SUCCEEDED|FAILED)" || true
+          grep -q "TEST SUCCEEDED" ui-test.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-test-log
+          path: ui-test.log

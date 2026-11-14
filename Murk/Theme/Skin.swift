@@ -30,6 +30,8 @@ enum Skin: String, CaseIterable, Identifiable {
 
     /// Light skins get dark text and a light status bar style.
     var isLight: Bool { self == .ember || self == .fog }
+    /// Part of Murk Pro. Graphite, Ember and Fog are free.
+    var isPremium: Bool { self == .aurora || self == .storm || self == .sunset }
     var rainHex: UInt32 { 0x3EA0FF }
 
     var bg: Color { Color(hex: bgHex) }
@@ -94,6 +96,8 @@ extension UIColor {
 // MARK: - Type
 
 extension Font {
-    static func display(_ size: CGFloat) -> Font { .system(size: size, weight: .black) }
-    static func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font { .system(size: size, weight: weight, design: .monospaced) }
+    /// Follows the user's text size, up to 35% larger.
+    static func scaled(_ size: CGFloat) -> CGFloat { min(UIFontMetrics.default.scaledValue(for: size), size * 1.35) }
+    static func display(_ size: CGFloat) -> Font { .system(size: scaled(size), weight: .black) }
+    static func mono(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font { .system(size: scaled(size), weight: weight, design: .monospaced) }
 }

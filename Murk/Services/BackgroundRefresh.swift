@@ -2,7 +2,8 @@ import Foundation
 import BackgroundTasks
 import WidgetKit
 
-/// Checks for new weather alerts in the background (iOS decides exactly when, roughly every 30+ min).
+/// Refreshes the forecast in the background (iOS decides exactly when, roughly every 30+ min):
+/// updates the widgets' snapshot and sends any new alerts the user asked for.
 enum BackgroundRefresh {
     static let id = "com.rilwan11.murk.refresh"
 
@@ -22,20 +23,28 @@ enum BackgroundRefresh {
     private static func handle(_ task: BGAppRefreshTask) {
         schedule()
         let work = Task {
-            let place = SharedStore.place
-            let d = UserDefaults.standard
-            if (d.object(forKey: "alerts") as? Bool ?? true), let list = try? await WeatherService().alerts(for: place) {
-                var seen = Set(d.stringArray(forKey: "seenAlerts") ?? [])
-                let fresh = list.filter { !seen.contains($0.id) }
-                if !fresh.isEmpty {
-                    fresh.forEach { seen.insert($0.id) }
-                    d.set(Array(seen.suffix(200)), forKey: "seenAlerts")
-                    AppState.postNotifications(fresh, place: place)
-                }
-            }
-            WidgetCenter.shared.reloadAllTimelines()
-            task.setTaskCompleted(success: true)
+            let ok = await refresh()
+            task.setTaskCompleted(success: ok && !Task.isCancelled)
         }
         task.expirationHandler = { work.cancel() }
+    }
+
+    /// One bounded refresh for the place the widgets show.
+    static func refresh(repository: WeatherProviding = WeatherRepository.live, defaults: UserDefaults = .standard) async -> Bool {
+        let place = SharedStore.place
+        guard var f = try? await repository.core(for: place), !Task.isCancelled else { return false }
+        WidgetSnapshot(forecast: f, unit: SharedStore.unit, skin: SharedStore.skin).save()
+        WidgetCenter.shared.reloadAllTimelines()
+
+        let rules = NotificationRules.load(defaults)
+        if rules.official || rules.anyAdvanced {
+            let extras = await repository.extras(for: place)
+            guard !Task.isCancelled else { return true }
+            f.aqi = extras.aqi
+            f.alerts = extras.alerts
+            AlertDispatcher.deliver(for: f, rules: rules, unit: SharedStore.unit,
+                                    isPro: defaults.bool(forKey: ProStatus.cacheKey))
+        }
+        return true
     }
 }

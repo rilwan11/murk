@@ -7,6 +7,8 @@ struct MoonOrbView: UIViewRepresentable {
     let tint: UInt32
     /// The sky behind the moon when it's daytime (nil at night).
     var daySky: UInt32? = nil
+    var active = true
+    var calm = false
 
     final class Coordinator { var material = SCNMaterial(); var node = SCNNode() }
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -15,7 +17,7 @@ struct MoonOrbView: UIViewRepresentable {
         let v = SCNView()
         v.backgroundColor = .clear
         v.antialiasingMode = .multisampling4X
-        v.preferredFramesPerSecond = 60
+        v.preferredFramesPerSecond = 30
         let scene = SCNScene()
         scene.background.contents = UIColor.clear
 
@@ -36,7 +38,7 @@ struct MoonOrbView: UIViewRepresentable {
         // A slow sway so it reads as a ball, not a sticker.
         let sway = SCNAction.sequence([.rotateBy(x: 0, y: 0.22, z: 0, duration: 9), .rotateBy(x: 0, y: -0.22, z: 0, duration: 9)])
         sway.timingMode = .easeInEaseOut
-        n.runAction(.repeatForever(sway))
+        if !calm { n.runAction(.repeatForever(sway)) }
 
         v.scene = scene
         v.pointOfView = cam
@@ -44,12 +46,17 @@ struct MoonOrbView: UIViewRepresentable {
         v.defaultCameraController.interactionMode = .orbitTurntable
         v.defaultCameraController.inertiaEnabled = true
         v.cameraControlConfiguration.allowsTranslation = false
-        v.isPlaying = true
+        v.isPlaying = active
+        v.rendersContinuously = false
         update(m)
         return v
     }
 
-    func updateUIView(_ v: SCNView, context: Context) { update(context.coordinator.material) }
+    func updateUIView(_ v: SCNView, context: Context) {
+        update(context.coordinator.material)
+        v.scene?.isPaused = !active
+        v.isPlaying = active
+    }
 
     private func update(_ m: SCNMaterial) {
         MoonLook.setAge(age, on: m)

@@ -11,7 +11,13 @@ enum SharedStore {
             guard let d = defaults.data(forKey: "widget.place"), let p = try? JSONDecoder().decode(Place.self, from: d) else { return .sanDiego }
             return p
         }
-        set { if let d = try? JSONEncoder().encode(newValue) { defaults.set(d, forKey: "widget.place") } }
+        set {
+            // Widgets only need the neighborhood, so the shared copy is rounded to about 1 km.
+            var p = newValue
+            p.latitude = Coordinate.rounded(p.latitude, places: 2)
+            p.longitude = Coordinate.rounded(p.longitude, places: 2)
+            if let d = try? JSONEncoder().encode(p) { defaults.set(d, forKey: "widget.place") }
+        }
     }
 
     static var unit: TempUnit {
@@ -22,5 +28,11 @@ enum SharedStore {
     static var skin: Skin {
         get { Skin(rawValue: defaults.string(forKey: "widget.skin") ?? "") ?? .graphite }
         set { defaults.set(newValue.rawValue, forKey: "widget.skin") }
+    }
+
+    /// Round coordinates to about 11 km before sending them to weather providers.
+    static var approximateLocation: Bool {
+        get { defaults.bool(forKey: "privacy.approximate") }
+        set { defaults.set(newValue, forKey: "privacy.approximate") }
     }
 }

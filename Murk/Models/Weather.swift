@@ -9,7 +9,7 @@ struct Place: Codable, Hashable, Identifiable {
     var isCurrentLocation: Bool = false
 
     var id: String {
-        isCurrentLocation ? "current" : "\(name)|\(String(format: "%.3f", latitude))|\(String(format: "%.3f", longitude))"
+        isCurrentLocation ? "current" : "\(name)|\(Coordinate.string(latitude, places: 3))|\(Coordinate.string(longitude, places: 3))"
     }
 
     static let sanDiego = Place(name: "San Diego", latitude: 32.7157, longitude: -117.1611)
@@ -34,15 +34,15 @@ enum TempUnit: String, CaseIterable, Identifiable {
     var windLabel: String { self == .fahrenheit ? "MPH" : "KM/H" }
     /// Internal visibility is meters.
     func visibility(_ m: Double) -> String {
-        self == .fahrenheit ? String(format: "%.0f MI", m / 1609.34) : String(format: "%.0f KM", m / 1000)
+        self == .fahrenheit ? "\((m / 1609.34).formatted(.number.precision(.fractionLength(0)))) MI" : "\((m / 1000).formatted(.number.precision(.fractionLength(0)))) KM"
     }
     /// Internal pressure is hPa.
     func pressure(_ hPa: Double) -> String {
-        self == .fahrenheit ? String(format: "%.2f INHG", hPa * 0.02953) : "\(Int(hPa.rounded())) HPA"
+        self == .fahrenheit ? "\((hPa * 0.02953).formatted(.number.precision(.fractionLength(2)))) INHG" : "\(Int(hPa.rounded())) HPA"
     }
     /// Internal precipitation is mm.
     func precip(_ mm: Double) -> String {
-        self == .fahrenheit ? String(format: "%.2f IN", mm / 25.4) : String(format: "%.1f MM", mm)
+        self == .fahrenheit ? "\((mm / 25.4).formatted(.number.precision(.fractionLength(2)))) IN" : "\(mm.formatted(.number.precision(.fractionLength(1)))) MM"
     }
 }
 
@@ -167,6 +167,8 @@ struct HourlyPoint: Identifiable {
     var windDirection: Double = 0
     var precip: Double = 0          // mm in the hour
     var apparent: Double?
+    var windGust: Double?
+    var uvIndex: Double?
 
     var condition: Condition { Condition(code: code, isDay: isDay) }
 }
@@ -184,6 +186,11 @@ struct WeatherAlert: Identifiable, Hashable {
     var headline: String
     var severity: String
     var ends: Date?
+    var detail: String? = nil
+    var instruction: String? = nil
+
+    /// Extreme and Severe alerts get the strongest treatment.
+    var isSevere: Bool { severity == "Extreme" || severity == "Severe" }
 }
 
 struct Forecast {
@@ -196,6 +203,12 @@ struct Forecast {
     var aqi: Int?
     var timeZone: TimeZone
     var fetchedAt: Date
+    /// True when this came from the disk cache, not a fresh request.
+    var isCached = false
+
+    func age(now: Date = Date()) -> TimeInterval { max(0, now.timeIntervalSince(fetchedAt)) }
+    /// Older than an hour: still shown, but labeled.
+    func isStale(now: Date = Date()) -> Bool { age(now: now) > 3600 }
 }
 
 // MARK: - Helpers

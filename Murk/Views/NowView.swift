@@ -10,6 +10,10 @@ struct NowView: View {
     @State private var reset = 0
     @State private var showHint = true
     @State private var headerDrag: CGFloat = 0
+    @State private var showAlerts = false
+    @AppStorage("locationPromptDismissed") private var locationPromptDismissed = false
+    @Environment(\.pageActive) private var pageActive
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// The live sky for whatever moment the scene is showing (nil on the light skins, which keep their flat color).
     private func makeSky(for c: SceneConfig?) -> Sky? {
@@ -27,28 +31,63 @@ struct NowView: View {
         let sky = makeSky(for: config)
         VStack(spacing: 0) {
             header
-            if let pill = state.headsUp {
-                let isAlert = state.forecast?.alerts.isEmpty == false
-                HStack(spacing: 8) {
-                    Image(systemName: isAlert ? "exclamationmark.triangle.fill" : "cloud.rain.fill").font(.system(size: 12))
-                    Text(pill).font(.mono(12)).tracking(2).lineLimit(1)
+            if !state.useLocation && !locationPromptDismissed && state.forecast != nil {
+                HStack(spacing: 4) {
+                    Button { locationPromptDismissed = true; state.selectCurrentLocation() } label: {
+                        Label("USE MY LOCATION", systemImage: "location.fill").font(.mono(11)).tracking(1.5)
+                            .padding(.horizontal, 14).padding(.vertical, 7)
+                            .background(Capsule().stroke(line))
+                    }
+                    Button { locationPromptDismissed = true } label: {
+                        Image(systemName: "xmark").font(.system(size: 10, weight: .bold)).frame(width: 30, height: 30)
+                    }
+                    .accessibilityLabel("Dismiss")
                 }
-                .padding(.horizontal, 16).padding(.vertical, 7)
-                .foregroundStyle(isAlert ? Color.white : (sky == nil ? skin.bg : (sky!.bright ? Color.white : Color(hex: 0x13233D))))
-                .background(Capsule().fill(isAlert ? Color(hex: 0xD93A2B) : ink))
+                .foregroundStyle(ink)
+                .padding(.top, 6)
+            }
+            if let pill = state.headsUp {
+                let alert = state.topAlert
+                let isAlert = alert != nil
+                Button { if isAlert { showAlerts = true } } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: isAlert ? (alert?.isSevere == true ? "exclamationmark.octagon.fill" : "exclamationmark.triangle.fill") : "cloud.rain.fill")
+                            .font(.system(size: 12))
+                        Text(pill).font(.mono(12)).tracking(2).lineLimit(1).minimumScaleFactor(0.7)
+                        if isAlert { Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)) }
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, alert?.isSevere == true ? 10 : 7)
+                    .foregroundStyle(isAlert ? Color.white : (sky == nil ? skin.bg : (sky!.bright ? Color.white : Color(hex: 0x13233D))))
+                    .background(Capsule().fill(isAlert ? Color(hex: 0xC42F21) : ink))
+                    // Severe alerts get a second outline, so they stand out by shape as well as color.
+                    .overlay { if alert?.isSevere == true { Capsule().stroke(Color.white, lineWidth: 2).padding(3) } }
+                }
+                .buttonStyle(.plain)
+                .disabled(!isAlert)
+                .accessibilityLabel(isAlert ? Text("Weather alert: \(pill)") : Text(pill))
+                .accessibilityHint(isAlert ? Text("Shows the alert details") : Text(""))
                 .padding(.top, 8)
                 .transition(.opacity)
             }
 
             ZStack(alignment: .bottom) {
                 if let config {
-                    WeatherSceneView(config: config, onThunder: { SoundEngine.shared.thunder() })
-                } else {
+                    WeatherSceneView(config: config, active: pageActive, calm: reduceMotion,
+                                     onThunder: { SoundEngine.shared.thunder() })
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityAddTraits(.isImage)
+                        .accessibilityLabel(Text(sceneDescription))
+                        .accessibilityHint(Text("A 3D scene of the weather. Double tap for new clouds."))
+                        .accessibilityIdentifier("scene")
+                } else if state.isLoading || state.activePlace != nil && state.failure == nil {
                     ProgressView().tint(ink).frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    emptyState
                 }
                 HStack {
                     Spacer()
                     Text("DRAG TO SPIN · PINCH TO ZOOM · TAP FOR NEW CLOUDS")
+                        .accessibilityHidden(true)
                         .font(.mono(9)).tracking(1).foregroundStyle(muted)
                         .opacity(showHint ? 1 : 0)
                     Spacer()
@@ -60,6 +99,7 @@ struct NowView: View {
                             .frame(width: 36, height: 36)
                             .background(Circle().stroke(line))
                     }
+                    .accessibilityLabel("Reset the view")
                     .foregroundStyle(ink)
                     .padding(.trailing, 16)
                 }
@@ -77,6 +117,12 @@ struct NowView: View {
                     .padding(.horizontal, sky == nil ? 0 : 12).padding(.vertical, sky == nil ? 0 : 5)
                     .background { if let sky { Capsule().fill(sky.glass) } }
                     .padding(.top, 2)
+            }
+            if selectedDay == 0, hour == nil, !state.minimal, let f = state.forecast, let next = Outlook.summary(f, unit: state.unit) {
+                Label(next, systemImage: "arrow.turn.down.right").font(.mono(10)).tracking(1.2)
+                    .foregroundStyle(muted).lineLimit(1).minimumScaleFactor(0.7)
+                    .padding(.top, 4).padding(.horizontal, 20)
+                    .accessibilityLabel(Text("Coming up: \(next.capitalized)"))
             }
 
             if !state.upcomingHours.isEmpty {
@@ -109,6 +155,37 @@ struct NowView: View {
         .onChange(of: hour) { _, h in if h != nil { selectedDay = 0 } }
         .onChange(of: soundKey) { _, _ in updateSound(config) }
         .onAppear { updateSound(config) }
+        .sheet(isPresented: $showAlerts) {
+            AlertSheet(alerts: state.forecast?.alerts ?? [], place: state.forecast?.place.name ?? "", time: { state.time($0) })
+        }
+    }
+
+    /// Nothing to show yet: say why and offer the ways forward.
+    private var emptyState: some View {
+        VStack(spacing: 14) {
+            Image(systemName: state.failure.map(AppState.symbol) ?? "cloud").font(.system(size: 40, weight: .semibold))
+            Text(state.failure.map { AppState.describe($0) } ?? String(localized: "NO PLACE CHOSEN YET."))
+                .font(.mono(12)).tracking(1.5).multilineTextAlignment(.center)
+            if state.failure != nil {
+                Button("Try again") { state.retry() }.buttonStyle(.bordered)
+            }
+            if state.activePlace == nil {
+                Button("Use Current Location") { state.selectCurrentLocation() }.buttonStyle(.borderedProminent)
+                Button("Choose a city") { showSettings = true }.buttonStyle(.bordered)
+            }
+        }
+        .foregroundStyle(ink)
+        .padding(30)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// What the 3D scene shows, in words.
+    private var sceneDescription: String {
+        guard let f = state.forecast else { return "" }
+        let t = hourPoint.map { state.unit.temp($0.temperature) } ?? state.unit.temp(f.current.temperature)
+        var parts = [conditionTitle, String(localized: "\(t) degrees")]
+        if let feels = feelsLike { parts.append(String(localized: "feels like \(feels)")) }
+        return parts.joined(separator: ", ")
     }
 
     // MARK: Pieces
@@ -121,6 +198,8 @@ struct NowView: View {
                     Image(systemName: "chevron.left").font(.system(size: 15, weight: .bold)).frame(width: 44, height: 44)
                 }
                 .opacity(count > 1 ? 0.6 : 0).disabled(count < 2)
+                .accessibilityLabel("Previous place")
+                .accessibilityHidden(count < 2)
                 Spacer()
                 Button { showSettings = true } label: {
                     HStack(spacing: 6) {
@@ -132,11 +211,15 @@ struct NowView: View {
                     }
                     .offset(x: headerDrag * 0.4)
                 }
+                .accessibilityHint("Opens places and settings")
+                .accessibilityIdentifier("placeName")
                 Spacer()
                 Button { showSettings = true } label: {
                     Image(systemName: "slider.horizontal.3").font(.system(size: 22, weight: .bold))
                         .frame(width: 44, height: 44)
                 }
+                .accessibilityLabel("Settings")
+                .accessibilityIdentifier("settingsButton")
             }
             .foregroundStyle(ink)
             if count > 1 {
@@ -160,27 +243,30 @@ struct NowView: View {
     }
 
     private var footer: some View {
-        Group {
-            if let err = state.errorMessage {
-                Button { state.retry() } label: { Text(err.uppercased()) }
-                    .foregroundStyle(state.skin.sun)
-            } else if let f = state.forecast {
-                let day = selectedDay < f.daily.count ? f.daily[selectedDay] : nil
-                if let h = hourPoint {
+        TimelineView(.periodic(from: .now, by: 30)) { tl in
+            Group {
+                if state.forecast != nil, let h = hourPoint {
                     Text("\(hourLabel(h.time)) · \(h.precipChance)% RAIN · TAP NOW TO RETURN")
-                } else if selectedDay > 0, let day {
+                } else if let f = state.forecast, selectedDay > 0, selectedDay < f.daily.count {
+                    let day = f.daily[selectedDay]
                     Text("\(state.dayLabel(day, index: selectedDay)) HIGH · \(day.precipChance)% RAIN · TAP TODAY TO RETURN")
-                } else {
-                    Text("UPDATED \(state.time(f.fetchedAt)) · FORECAST BY OPEN-METEO")
+                } else if let st = state.status(now: tl.date) {
+                    // How fresh the forecast is, and a quiet way to retry when it isn't.
+                    Button { if st.canRetry { state.retry() } } label: {
+                        Label(st.text, systemImage: st.symbol)
+                            .foregroundStyle(st.isProblem ? ink : muted)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!st.canRetry)
+                    .accessibilityHint(st.canRetry ? Text("Refreshes the forecast") : Text(""))
+                    .accessibilityIdentifier("status")
                 }
-            } else if state.isLoading {
-                Text("LOADING…")
             }
+            .font(.mono(9)).tracking(1.2)
+            .foregroundStyle(muted)
+            .multilineTextAlignment(.center)
+            .padding(.top, 12).padding(.horizontal, 20)
         }
-        .font(.mono(9)).tracking(1.2)
-        .foregroundStyle(muted)
-        .multilineTextAlignment(.center)
-        .padding(.top, 12).padding(.horizontal, 20)
     }
 
     // MARK: Derived
@@ -191,7 +277,7 @@ struct NowView: View {
     }
 
     private func hourLabel(_ d: Date) -> String {
-        let f = DateFormatter(); f.timeZone = state.forecast?.timeZone; f.dateFormat = "h a"
+        let f = DateFormatter(); f.timeZone = state.forecast?.timeZone; f.setLocalizedDateFormatFromTemplate("j")
         return f.string(from: d).uppercased()
     }
 
@@ -357,6 +443,18 @@ struct HourScrubber: View {
         }
         .frame(height: bubbleH + 6 + trackH + 30)
         .animation(.easeOut(duration: 0.15), value: selection == nil)
+        .accessibilityElement()
+        .accessibilityLabel(Text("Hour by hour"))
+        .accessibilityValue(Text(spoken(selection ?? 0)))
+        .accessibilityHint(Text("Swipe up or down to move through the next 24 hours"))
+        .accessibilityAdjustableAction { direction in
+            let i = selection ?? 0
+            switch direction {
+            case .increment: selection = min(i + 1, hours.count - 1)
+            case .decrement: selection = i - 1 <= 0 ? nil : i - 1
+            @unknown default: break
+            }
+        }
     }
 
     // MARK: Pieces
@@ -438,11 +536,18 @@ struct HourScrubber: View {
         }
     }
 
+    private func spoken(_ i: Int) -> String {
+        guard hours.indices.contains(i) else { return "" }
+        let h = hours[i]
+        let when = i == 0 ? String(localized: "Now") : label(h.time)
+        return String(localized: "\(when), \(state.unit.temp(h.temperature)) degrees, \(h.condition.title), \(h.precipChance) percent chance of rain")
+    }
+
     private func isSunEvent(_ k: Int) -> Bool { sunEvents().contains { $0.0 == k } }
 
     private func label(_ d: Date) -> String {
-        let f = DateFormatter(); f.timeZone = state.forecast?.timeZone; f.dateFormat = "ha"
-        return f.string(from: d).lowercased()
+        let f = DateFormatter(); f.timeZone = state.forecast?.timeZone; f.setLocalizedDateFormatFromTemplate("j")
+        return f.string(from: d).lowercased().replacingOccurrences(of: " ", with: "")
     }
 }
 
@@ -473,6 +578,9 @@ struct ForecastStrip: View {
                     withAnimation(.easeInOut(duration: 0.2)) { selected = i }
                     UISelectionFeedbackGenerator().selectionChanged()
                 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text("\(state.dayLabel(d, index: i).capitalized), \(d.condition.title), high \(state.unit.temp(d.high)), low \(state.unit.temp(d.low)), \(d.precipChance) percent chance of rain"))
+                .accessibilityAddTraits(i == selected ? [.isButton, .isSelected] : .isButton)
             }
         }
         .padding(.horizontal, 12)

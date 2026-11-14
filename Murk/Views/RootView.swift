@@ -20,6 +20,8 @@ extension View {
 
 struct RootView: View {
     @EnvironmentObject var state: AppState
+    @EnvironmentObject var store: EntitlementStore
+    @Environment(\.scenePhase) private var phase
     @State private var page = 0
     @State private var drag: CGFloat = 0
     @State private var dragActive = false
@@ -43,11 +45,13 @@ struct RootView: View {
 
                 HStack(spacing: 0) {
                     NowView(showSettings: $showSettings).frame(width: w).coordinateSpace(name: "page")
+                        .environment(\.pageActive, live(0))
+                        .accessibilityHidden(page != 0)
                     Group {
-                        AirView().frame(width: w).coordinateSpace(name: "page")
-                        RainView().frame(width: w).coordinateSpace(name: "page")
-                        SunView().frame(width: w).coordinateSpace(name: "page")
-                        MoonView().frame(width: w).coordinateSpace(name: "page")
+                        AirView().frame(width: w).coordinateSpace(name: "page").environment(\.pageActive, live(1)).accessibilityHidden(page != 1)
+                        RainView().frame(width: w).coordinateSpace(name: "page").environment(\.pageActive, live(2)).accessibilityHidden(page != 2)
+                        SunView().frame(width: w).coordinateSpace(name: "page").environment(\.pageActive, live(3)).accessibilityHidden(page != 3)
+                        MoonView().frame(width: w).coordinateSpace(name: "page").environment(\.pageActive, live(4)).accessibilityHidden(page != 4)
                     }
                     .environment(\.sky, state.forecast.flatMap { Sky.current($0, skin: skin) })
                 }
@@ -66,9 +70,34 @@ struct RootView: View {
         .foregroundStyle(skin.ink)
         .preferredColorScheme(skin.isLight ? .light : .dark)
         .sheet(isPresented: $showSettings) {
-            SettingsSheet().environmentObject(state)
+            SettingsSheet().environmentObject(state).environmentObject(store)
         }
+        // From Settings the paywall is presented by the settings sheet itself.
+        .sheet(item: showSettings ? .constant(nil) : $state.paywall) { reason in
+            PaywallView(reason: reason).environmentObject(store)
+        }
+        .onChange(of: state.route) { _, _ in follow() }
+        .onAppear { follow() }
+        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .animation(.easeInOut(duration: 0.4), value: skin)
+    }
+
+    /// Only the page on screen animates, and only while the app is in front.
+    private func live(_ i: Int) -> Bool {
+        phase == .active && !showSettings && abs(page - i) <= (dragActive ? 1 : 0)
+    }
+
+    /// Goes where a murk:// link points.
+    private func follow() {
+        guard let route = state.route else { return }
+        state.route = nil
+        switch route {
+        case .page(let i):
+            showSettings = false
+            withAnimation { page = min(max(i, 0), pageCount - 1) }
+        case .settings:
+            showSettings = true
+        }
     }
 
     private func swipe(width: CGFloat) -> some Gesture {
@@ -97,6 +126,7 @@ struct RootView: View {
 }
 
 struct PageDots: View {
+    static let names = [String(localized: "Now"), String(localized: "Air"), String(localized: "Rain"), String(localized: "Sun"), String(localized: "Moon")]
     @EnvironmentObject var state: AppState
     @Environment(\.sky) private var sky
     let count: Int
@@ -114,8 +144,18 @@ struct PageDots: View {
                     .onTapGesture { withAnimation { page = i } }
             }
         }
+        .accessibilityElement()
+        .accessibilityLabel(Text("Page"))
+        .accessibilityValue(Text(Self.names[min(page, Self.names.count - 1)]))
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: page = min(page + 1, count - 1)
+            case .decrement: page = max(page - 1, 0)
+            @unknown default: break
+            }
+        }
         .padding(.horizontal, 10)
-        .background(Capsule().fill(.ultraThinMaterial).opacity(page == 0 ? 0 : 1))
+        .background(Capsule().fill(UIAccessibility.isReduceTransparencyEnabled ? AnyShapeStyle(p.glass) : AnyShapeStyle(.ultraThinMaterial)).opacity(page == 0 ? 0 : 1))
         .animation(.easeInOut(duration: 0.25), value: page)
     }
 }

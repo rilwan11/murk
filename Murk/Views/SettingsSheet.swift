@@ -4,7 +4,13 @@ import UIKit
 
 struct SettingsSheet: View {
     @EnvironmentObject var state: AppState
+    @EnvironmentObject var store: EntitlementStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
+    @State private var explainNotifications = false
+    @State private var notificationsBlocked = false
+    @State private var pendingRule: ((inout NotificationRules) -> Void)?
+    @State private var manageSubscription = false
     @StateObject private var search = CitySearch()
     @State private var adding = false
     @FocusState private var searchFocused: Bool
@@ -17,12 +23,19 @@ struct SettingsSheet: View {
                 Section {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 12) {
-                            AutoSkinCard(selected: state.autoSkin)
-                                .onTapGesture { withAnimation { state.autoSkin = true } }
-                            ForEach(Skin.allCases) { skin in
-                                SkinCard(skin: skin, selected: !state.autoSkin && state.skin == skin)
-                                    .onTapGesture { withAnimation { state.autoSkin = false; state.skin = skin } }
+                            ForEach(Skin.allCases.sorted { !$0.isPremium && $1.isPremium }) { skin in
+                                let on = !state.autoSkin && state.skin == skin
+                                SkinCard(skin: skin, selected: on, locked: skin.isPremium && !state.isPro)
+                                    .onTapGesture { withAnimation { state.choose(skin) } }
+                                    .accessibilityElement(children: .ignore)
+                                    .accessibilityLabel(Text(skin.isPremium && !state.isPro ? "\(skin.name) skin, Murk Pro" : "\(skin.name) skin"))
+                                    .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
                             }
+                            AutoSkinCard(selected: state.autoSkin, locked: !state.isPro)
+                                .onTapGesture { withAnimation { state.choose(nil) } }
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel(Text(state.isPro ? "Auto skin, follows the weather" : "Auto skin, Murk Pro"))
+                                .accessibilityAddTraits(state.autoSkin ? [.isButton, .isSelected] : .isButton)
                         }
                         .padding(.vertical, 4)
                     }
@@ -31,21 +44,40 @@ struct SettingsSheet: View {
                 } header: { header("Skins") }
 
                 Section {
-                    placeRow(icon: "location.fill",
-                             title: state.currentPlace?.name ?? "Current Location",
-                             subtitle: state.locationDenied ? "Location is off · enable in Settings" : "Follows you",
-                             selected: state.isFollowingLocation) {
-                        state.selectCurrentLocation()
-                        dismiss()
+                    // Current Location: says plainly whether it's in use, off, blocked, or standing in with a saved city.
+                    if state.useLocation {
+                        placeRow(icon: state.isFollowingLocation ? "location.fill" : "location.slash",
+                                 title: state.isFollowingLocation ? (state.currentPlace?.name ?? String(localized: "Current Location")) : String(localized: "Current Location"),
+                                 subtitle: locationSubtitle,
+                                 selected: state.isFollowingLocation) {
+                            state.selectCurrentLocation()
+                            dismiss()
+                        }
+                        if state.locationDenied {
+                            Button("Open Settings to allow location") {
+                                if let u = URL(string: UIApplication.openSettingsURLString) { openURL(u) }
+                            }
+                            .font(.footnote)
+                        }
+                    } else {
+                        Button {
+                            state.selectCurrentLocation()
+                            dismiss()
+                        } label: {
+                            Label("Use Current Location", systemImage: "location")
+                        }
+                        .foregroundStyle(state.skin.accent)
                     }
                     ForEach(state.places) { place in
-                        placeRow(icon: "mappin", title: place.name, subtitle: nil,
-                                 selected: state.selectedID == place.id) {
+                        placeRow(icon: "mappin", title: place.name,
+                                 subtitle: state.fallbackPlace?.id == place.id ? String(localized: "Showing this while your location isn't available") : nil,
+                                 selected: state.selectedID == place.id || state.fallbackPlace?.id == place.id) {
                             state.select(place)
                             dismiss()
                         }
                     }
                     .onDelete { state.remove(at: $0) }
+                    .onMove { state.move(from: $0, to: $1) }
 
                     if adding {
                         TextField("Search for a city", text: $search.query)
@@ -56,10 +88,9 @@ struct SettingsSheet: View {
                             Button {
                                 Task {
                                     if let p = await search.resolve(r) {
-                                        state.add(p)
                                         search.query = ""
                                         adding = false
-                                        dismiss()
+                                        if state.add(p) { dismiss() }
                                     }
                                 }
                             } label: {
@@ -71,14 +102,21 @@ struct SettingsSheet: View {
                         }
                     } else {
                         Button {
+                            // A second saved city is where Murk Pro starts.
+                            guard state.canAddPlace else { state.paywall = .city; return }
                             adding = true
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { searchFocused = true }
                         } label: {
-                            Label("Add a city", systemImage: "plus.circle.fill")
+                            Label(state.canAddPlace ? "Add a city" : "Add a city · Murk Pro", systemImage: "plus.circle.fill")
                         }
                         .foregroundStyle(state.skin.accent)
                     }
-                } header: { header("Locations") }
+                    if state.useLocation {
+                        Button("Stop using my location") { state.stopUsingLocation() }.font(.footnote).foregroundStyle(.secondary)
+                    }
+                } header: { header("Locations") } footer: {
+                    Text("Murk asks for your location only when you choose Use Current Location, and only while the app is open. Saved cities always work without it.")
+                }
 
                 Section {
                     Picker(selection: $state.unit) {
@@ -86,9 +124,58 @@ struct SettingsSheet: View {
                     } label: { Label("Units", systemImage: "thermometer.medium") }
                     .pickerStyle(.segmented)
                     Toggle(isOn: $state.minimal) { Label("Minimal mode", systemImage: "eye.slash") }
-                    Toggle(isOn: $state.alerts) { Label("Alerts & heads-up pill", systemImage: "exclamationmark.triangle") }
+                    Toggle(isOn: $state.alerts) { Label("Heads-up pill", systemImage: "exclamationmark.triangle") }
                     Toggle(isOn: $state.sound) { Label("Weather sounds", systemImage: "speaker.wave.2") }
-                } header: { header("Settings") }
+                    Toggle(isOn: $state.approximateLocation) { Label("Approximate location", systemImage: "scope") }
+                } header: { header("Settings") } footer: {
+                    Text("Approximate location rounds your coordinates to about 11 km (7 mi) before they are sent to the weather services. Forecasts stay close; alerts near a county line may be missed.")
+                }
+                .tint(state.skin.accent)
+
+                Section {
+                    ruleToggle("Official weather alerts", "exclamationmark.triangle.fill", pro: false, isOn: state.rules.official) { $0.official = $1 }
+                    ruleToggle("Rain on the way", "cloud.rain.fill", pro: true, isOn: state.rules.rain) { $0.rain = $1 }
+                    if state.rules.rain && state.isPro {
+                        Stepper("At \(state.rules.rainChance)% chance or more", value: $state.rules.rainChance, in: 30...90, step: 10).font(.footnote)
+                    }
+                    ruleToggle("Strong gusts", "wind", pro: true, isOn: state.rules.wind) { $0.wind = $1 }
+                    if state.rules.wind && state.isPro {
+                        Stepper("At \(state.unit.wind(state.rules.gustKmh).lowercased()) or more", value: $state.rules.gustKmh, in: 30...110, step: 10).font(.footnote)
+                    }
+                    ruleToggle("Poor air quality", "aqi.medium", pro: true, isOn: state.rules.aqi) { $0.aqi = $1 }
+                    if state.rules.aqi && state.isPro {
+                        Stepper("At AQI \(state.rules.aqiLevel) or more", value: $state.rules.aqiLevel, in: 51...201, step: 50).font(.footnote)
+                    }
+                    ruleToggle("High UV", "sun.max.trianglebadge.exclamationmark", pro: true, isOn: state.rules.uv) { $0.uv = $1 }
+                    if state.rules.uv && state.isPro {
+                        Stepper("At UV \(Int(state.rules.uvLevel)) or more", value: $state.rules.uvLevel, in: 3...11, step: 1).font(.footnote)
+                    }
+                    if notificationsBlocked {
+                        Button("Notifications are off for Murk. Open Settings to allow them.") {
+                            if let u = URL(string: UIApplication.openSettingsURLString) { openURL(u) }
+                        }
+                        .font(.footnote)
+                    }
+                } header: { header("Notify me about") } footer: {
+                    Text("Notifications are for the place Murk is showing. They are checked when Murk refreshes, including in the background when iOS allows, so they can arrive late. Official alerts come from the US National Weather Service.")
+                }
+                .tint(state.skin.accent)
+
+                Section {
+                    Button { state.paywall = .general } label: {
+                        HStack {
+                            Label(state.isPro ? "Murk Pro is active" : "Murk Pro", systemImage: state.isPro ? "checkmark.seal.fill" : "sparkles")
+                            Spacer()
+                            if !state.isPro { Text("See what's included").font(.footnote).foregroundStyle(.secondary) }
+                        }
+                    }
+                    Button("Restore Purchases") { Task { await store.restore() } }
+                    Button("Manage Subscription") { manageSubscription = true }
+                    if let m = store.message { Text(m).font(.footnote).foregroundStyle(.secondary) }
+                    #if DEBUG
+                    Toggle("Debug: unlock Pro (test builds only)", isOn: Binding(get: { store.debugUnlock }, set: { store.debugUnlock = $0 }))
+                    #endif
+                } header: { header("Murk Pro") }
                 .tint(state.skin.accent)
 
                 Section {
@@ -123,9 +210,18 @@ struct SettingsSheet: View {
                 Section {
                     VStack(spacing: 6) {
                         Text("Murk").font(.display(22))
-                        Text("Weather, but moodier.").foregroundStyle(.secondary)
-                        Link("Forecast data by Open-Meteo.com", destination: URL(string: "https://open-meteo.com")!)
+                        Text("Weather with Atmosphere.").foregroundStyle(.secondary)
+                        if let st = state.status() { Text(st.text.capitalized).font(.caption2).foregroundStyle(.secondary).multilineTextAlignment(.center) }
+                        Link("Forecast and air quality by Open-Meteo.com", destination: URL(string: ProviderConfig.current.attributionURL)!)
                             .font(.footnote)
+                        Link("US alerts by the National Weather Service", destination: URL(string: "https://www.weather.gov")!)
+                            .font(.footnote)
+                        HStack(spacing: 18) {
+                            Link("Privacy Policy", destination: Legal.privacy)
+                            Link("Terms of Use", destination: Legal.terms)
+                            Link("Support", destination: Legal.support)
+                        }
+                        .font(.footnote)
                     }
                     .frame(maxWidth: .infinity)
                     .listRowBackground(Color.clear)
@@ -141,6 +237,16 @@ struct SettingsSheet: View {
                     }
                 }
                 .ignoresSafeArea()
+            }
+            .alert("Turn on notifications?", isPresented: $explainNotifications) {
+                Button("Allow notifications") { Task { await finishEnablingRule(ask: true) } }
+                Button("Not now", role: .cancel) { pendingRule = nil }
+            } message: {
+                Text("Murk will only notify you about the weather you choose here, for the place it is showing. iOS will ask for permission next. You can change this any time.")
+            }
+            .manageSubscriptionsSheet(isPresented: $manageSubscription)
+            .sheet(item: $state.paywall) { reason in
+                PaywallView(reason: reason).environmentObject(store)
             }
             .navigationTitle("Murk")
             .navigationBarTitleDisplayMode(.inline)
@@ -159,6 +265,49 @@ struct SettingsSheet: View {
     }
 
     // MARK: Pieces
+
+    private var locationSubtitle: String {
+        if state.isFollowingLocation { return String(localized: "Follows you while Murk is open") }
+        let fallback = state.places.first.map { String(localized: " · showing \($0.name)") } ?? ""
+        switch state.locationProblem {
+        case .denied: return String(localized: "Location is off for Murk") + fallback
+        case .timedOut: return String(localized: "Couldn't find you in time") + fallback
+        case .unavailable: return String(localized: "Location isn't available") + fallback
+        case nil: return state.selectedID == nil ? String(localized: "Finding you…") : String(localized: "Tap to show where you are")
+        }
+    }
+
+    /// A notification switch. Pro rules open the paywall; turning one on explains, then asks iOS for permission once.
+    private func ruleToggle(_ title: LocalizedStringKey, _ icon: String, pro: Bool, isOn: Bool,
+                            _ set: @escaping (inout NotificationRules, Bool) -> Void) -> some View {
+        Toggle(isOn: Binding(get: { isOn && (!pro || state.isPro) }, set: { on in
+            if !on { var r = state.rules; set(&r, false); state.rules = r; return }
+            if pro && !state.isPro { state.paywall = .alerts; return }
+            pendingRule = { set(&$0, true) }
+            Task {
+                if await Notifier.isAuthorized() { await finishEnablingRule(ask: false) }
+                else if await Notifier.isDenied() { pendingRule = nil; notificationsBlocked = true }
+                else { explainNotifications = true }
+            }
+        })) {
+            HStack {
+                Label(title, systemImage: icon)
+                if pro && !state.isPro { Text("PRO").font(.mono(9)).padding(.horizontal, 5).padding(.vertical, 2).overlay(Capsule().stroke(.secondary)) }
+            }
+        }
+    }
+
+    private func finishEnablingRule(ask: Bool) async {
+        guard let apply = pendingRule else { return }
+        pendingRule = nil
+        let allowed = ask ? await Notifier.request() : true
+        if allowed {
+            var r = state.rules; apply(&r); state.rules = r
+            notificationsBlocked = false
+        } else {
+            notificationsBlocked = true
+        }
+    }
 
     private func header(_ t: String) -> some View {
         Text(t.uppercased()).font(.mono(12)).tracking(2).foregroundStyle(.secondary)
@@ -213,9 +362,20 @@ struct SettingsSheet: View {
     }
 }
 
+/// "PRO" marker with a lock, for looks that need Murk Pro.
+struct ProBadge: View {
+    var body: some View {
+        Label("PRO", systemImage: "lock.fill").font(.system(size: 10, weight: .heavy))
+            .padding(.horizontal, 7).padding(.vertical, 4)
+            .background(Capsule().fill(.black.opacity(0.55))).foregroundStyle(.white)
+            .padding(8)
+    }
+}
+
 struct SkinCard: View {
     let skin: Skin
     let selected: Bool
+    var locked = false
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             RoundedRectangle(cornerRadius: 22).fill(skin.swatch)
@@ -231,12 +391,16 @@ struct SkinCard: View {
         }
         .frame(width: 124, height: 150)
         .overlay(RoundedRectangle(cornerRadius: 22).stroke(selected ? Color.white : .clear, lineWidth: 3))
+        .overlay(alignment: .topTrailing) {
+            if locked { ProBadge() } else if selected { Image(systemName: "checkmark.circle.fill").foregroundStyle(.white).padding(8) }
+        }
         .contentShape(Rectangle())
     }
 }
 
 struct AutoSkinCard: View {
     let selected: Bool
+    var locked = false
     var body: some View {
         ZStack(alignment: .bottomLeading) {
             RoundedRectangle(cornerRadius: 22).fill(LinearGradient(colors: [Color(hex: 0xF5B445), Color(hex: 0x6B2D6E), Color(hex: 0x0F1A24)],
@@ -251,6 +415,9 @@ struct AutoSkinCard: View {
         }
         .frame(width: 124, height: 150)
         .overlay(RoundedRectangle(cornerRadius: 22).stroke(selected ? Color.white : .clear, lineWidth: 3))
+        .overlay(alignment: .topTrailing) {
+            if locked { ProBadge() } else if selected { Image(systemName: "checkmark.circle.fill").foregroundStyle(.white).padding(8) }
+        }
         .contentShape(Rectangle())
     }
 }
