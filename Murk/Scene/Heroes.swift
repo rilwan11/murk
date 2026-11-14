@@ -129,11 +129,13 @@ final class RainHero: HeroScene {
     private let precip = SCNNode()
     private let glint = SCNNode()
     private let liquidMat = HeroScene.pbr(UIColor(hex: 0x3EA0FF), rough: 0.15)
+    private let cloudMat = SCNMaterial()
     private var last: (Double, Double, Bool)?
     static let innerHeight: CGFloat = 2.2
 
     init() {
-        super.init(home: SCNVector3(0, 1.6, 8.2), target: SCNVector3(0, 1.0, 0))
+        // Far enough back that the cloud over the gauge stays inside the frame.
+        super.init(home: SCNVector3(0, 2.0, 10.8), target: SCNVector3(0, 1.75, 0))
         let root = scene.rootNode
 
         let key = SCNNode(); key.light = Self.light(.directional, 1100)
@@ -188,12 +190,16 @@ final class RainHero: HeroScene {
         surface.runAction(.repeatForever(wobble))
 
         // The cloud overhead.
-        let cloudMat = Self.pbr(UIColor(white: 0.9, alpha: 1), rough: 0.95)
+        cloudMat.lightingModel = .physicallyBased
+        cloudMat.roughness.contents = 1.0
+        cloudMat.metalness.contents = 0.0
+        cloudMat.diffuse.contents = UIColor(white: 0.93, alpha: 1)
         for (x, y, z, r) in [(-0.55, 0.0, 0.0, 0.55), (0.25, 0.15, 0.1, 0.7), (0.95, -0.05, -0.05, 0.48), (-0.05, -0.2, 0.35, 0.45), (0.5, -0.2, -0.35, 0.42)] as [(Float, Float, Float, CGFloat)] {
             let s = SCNNode(geometry: SCNSphere(radius: r)); s.geometry?.materials = [cloudMat]
             s.position = SCNVector3(x, y, z); cloud.addChildNode(s)
         }
-        cloud.position = SCNVector3(-0.15, 3.55, 0)
+        cloud.position = SCNVector3(-0.15, 3.3, 0)
+        cloud.renderingOrder = 0
         let drift = SCNAction.sequence([.moveBy(x: 0.25, y: 0, z: 0, duration: 5), .moveBy(x: -0.25, y: 0, z: 0, duration: 5)])
         drift.timingMode = .easeInEaseOut
         cloud.runAction(.repeatForever(drift), forKey: "drift")
@@ -222,7 +228,11 @@ final class RainHero: HeroScene {
         liquidMat.diffuse.contents = snow ? UIColor(white: 0.97, alpha: 1) : UIColor(hex: 0x3EA0FF)
         liquidMat.emission.contents = snow ? UIColor(white: 0.25, alpha: 1) : UIColor(hex: 0x0C3A7A)
         liquidMat.roughness.contents = snow ? 0.9 : 0.15
-        cloud.opacity = intensity > 0.02 ? 1 : 0.35
+        // Rain: a full grey cloud. Dry: a small white fair-weather cloud. Always solid, never see-through.
+        let wet = intensity > 0.02
+        cloud.opacity = 1
+        cloud.scale = wet ? SCNVector3(1, 1, 1) : SCNVector3(0.62, 0.62, 0.62)
+        cloudMat.diffuse.contents = wet ? UIColor(white: 0.62 - 0.22 * CGFloat(min(1, intensity)), alpha: 1) : UIColor(white: 0.97, alpha: 1)
         glint.light?.intensity = intensity > 0.02 ? 0 : 900
         SCNTransaction.commit()
 

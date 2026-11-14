@@ -205,23 +205,33 @@ private struct TonightBar: View {
             Astronomy.moonAltitude(latitude: lat, longitude: lon, at: start.addingTimeInterval(span * Double(i) / Double(steps))) > 0.125
         }
         let hours = forecast.hourly.filter { $0.time >= start.addingTimeInterval(-3600) && $0.time <= end }
+        let runs = Self.runs(up)
+        let cloudStops: [Gradient.Stop] = hours.compactMap { h in
+            guard let c = h.cloudCover else { return nil }
+            let loc = min(1, max(0, h.time.addingTimeInterval(1800).timeIntervalSince(start) / span))
+            return Gradient.Stop(color: Color.white.opacity(c / 100 * 0.85), location: loc)
+        }.sorted { $0.location < $1.location }
         VStack(spacing: 6) {
-            Canvas { ctx, size in
-                let bw = size.width / CGFloat(steps)
-                ctx.fill(Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 8), with: .color(Color(hex: 0x0B1430)))
-                for (i, u) in up.enumerated() where u {
-                    ctx.fill(Path(CGRect(x: CGFloat(i) * bw, y: size.height * 0.35, width: bw + 0.5, height: size.height * 0.3)),
-                             with: .color(Color(hex: state.skin.moonHex).opacity(0.85)))
-                }
-                for h in hours {
-                    guard let c = h.cloudCover, c > 10 else { continue }
-                    let x0 = CGFloat(h.time.timeIntervalSince(start) / span) * size.width
-                    let rect = CGRect(x: x0, y: 0, width: size.width * CGFloat(3600 / span), height: size.height).intersection(CGRect(origin: .zero, size: size))
-                    ctx.fill(Path(rect), with: .color(Color.gray.opacity(c / 100 * 0.55)))
+            // Cloud cover across the night, as one smooth band.
+            Capsule()
+                .fill(cloudStops.count > 1 ? AnyShapeStyle(LinearGradient(stops: cloudStops, startPoint: .leading, endPoint: .trailing))
+                                           : AnyShapeStyle(p.line))
+                .frame(height: 8)
+            // The night, with the hours the moon is up as solid bars.
+            GeometryReader { g in
+                let w = g.size.width
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color(hex: 0x0B1430))
+                    ForEach(Array(runs.enumerated()), id: \.offset) { _, r in
+                        let x0 = CGFloat(r.lowerBound) / CGFloat(steps) * w
+                        let x1 = CGFloat(r.upperBound) / CGFloat(steps) * w
+                        Capsule().fill(Color(hex: state.skin.moonHex))
+                            .frame(width: max(8, x1 - x0), height: 10)
+                            .offset(x: x0)
+                    }
                 }
             }
-            .frame(height: 30)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .frame(height: 22)
             HStack {
                 Label(state.time(start), systemImage: "sunset.fill")
                 Spacer()
@@ -229,8 +239,8 @@ private struct TonightBar: View {
             }
             .font(.mono(10)).foregroundStyle(p.muted)
             HStack(spacing: 10) {
-                HStack(spacing: 4) { RoundedRectangle(cornerRadius: 2).fill(Color(hex: state.skin.moonHex)).frame(width: 12, height: 6); Text(String(localized: "Moon up")) }
-                HStack(spacing: 4) { RoundedRectangle(cornerRadius: 2).fill(Color.gray.opacity(0.5)).frame(width: 12, height: 6); Text(String(localized: "Cloud")) }
+                HStack(spacing: 4) { Capsule().fill(Color(hex: state.skin.moonHex)).frame(width: 14, height: 6); Text(String(localized: "Moon up")) }
+                HStack(spacing: 4) { Capsule().fill(Color.white.opacity(0.7)).frame(width: 14, height: 6); Text(String(localized: "Cloud (brighter = cloudier)")) }
                 Spacer()
             }
             .font(.mono(9)).foregroundStyle(p.muted)
@@ -238,6 +248,20 @@ private struct TonightBar: View {
         .padding(.horizontal, 14).padding(.bottom, 4)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(Verdicts.moon(forecast, now: now).line))
+    }
+}
+
+extension TonightBar {
+    /// Consecutive stretches where the moon is up, as index ranges.
+    static func runs(_ up: [Bool]) -> [Range<Int>] {
+        var out: [Range<Int>] = []
+        var start: Int?
+        for (i, u) in up.enumerated() {
+            if u, start == nil { start = i }
+            if !u, let s = start { out.append(s..<i); start = nil }
+        }
+        if let s = start { out.append(s..<up.count) }
+        return out
     }
 }
 
