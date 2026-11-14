@@ -41,7 +41,8 @@ struct WidgetSnapshot: Codable, Equatable {
         latitude = Coordinate.rounded(f.place.latitude, places: 1)
         longitude = Coordinate.rounded(f.place.longitude, places: 1)
         timeZoneID = f.timeZone.identifier
-        fetchedAt = f.fetchedAt
+        // Whole seconds, so the value survives being written and read back unchanged.
+        fetchedAt = Date(timeIntervalSince1970: f.fetchedAt.timeIntervalSince1970.rounded())
         temperature = f.current.temperature
         apparent = f.current.apparent
         code = f.current.code
