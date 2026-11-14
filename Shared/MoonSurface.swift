@@ -83,13 +83,22 @@ enum MoonSurface {
         return albedoValues[y * w + x]
     }
 
+    /// Heights of the four neighbors of a texel (wrapping east-west, clamped at the poles).
+    private static func neighbors(_ x: Int, _ y: Int) -> (left: Float, right: Float, up: Float, down: Float) {
+        let xl: Int = (x - 1 + w) % w
+        let xr: Int = (x + 1) % w
+        let yu: Int = max(0, y - 1)
+        let yd: Int = min(h - 1, y + 1)
+        let row: Int = y * w
+        return (height[row + xl], height[row + xr], height[yu * w + x], height[yd * w + x])
+    }
+
     static func slope(lon: Double, lat: Double) -> (Float, Float) {
         var u = 0.4 + lon / (2 * .pi); u -= floor(u)
         let v = min(max(0.5 - lat / .pi, 0), 0.9999)
         let x = min(Int(u * Double(w)), w - 1), y = Int(v * Double(h))
-        let l = height[y * w + (x - 1 + w) % w], r = height[y * w + (x + 1) % w]
-        let up = height[max(0, y - 1) * w + x], dn = height[min(h - 1, y + 1) * w + x]
-        return (r - l, up - dn)
+        let n = neighbors(x, y)
+        return (n.right - n.left, n.up - n.down)
     }
 
     static let normal: UIImage = {
@@ -97,8 +106,8 @@ enum MoonSurface {
         let k: Float = 6
         for y in 0..<h {
             for x in 0..<w {
-                let l = height[y * w + (x - 1 + w) % w], r = height[y * w + (x + 1) % w]
-                let u = height[max(0, y - 1) * w + x], d = height[min(h - 1, y + 1) * w + x]
+                let n = neighbors(x, y)
+                let l: Float = n.left, r: Float = n.right, u: Float = n.up, d: Float = n.down
                 var nx = (l - r) * k, ny = (d - u) * k, nz: Float = 1
                 let len = (nx * nx + ny * ny + nz * nz).squareRoot()
                 nx /= len; ny /= len; nz /= len

@@ -422,11 +422,15 @@ struct HourScrubber: View {
 
     var body: some View {
         GeometryReader { g in
-            let w = g.size.width
-            let n = max(1, hours.count - 1)
-            let i = selection ?? 0
-            let x = w * CGFloat(i) / CGFloat(n)
-            let trackTop = bubbleH + 6
+            let w: CGFloat = g.size.width
+            let n: Int = max(1, hours.count - 1)
+            let i: Int = selection ?? 0
+            let x: CGFloat = w * CGFloat(i) / CGFloat(n)
+            let trackTop: CGFloat = bubbleH + 6
+            let labelY: CGFloat = trackTop + trackH + 22
+            let markerY: CGFloat = trackTop + trackH + 9
+            let thumbX: CGFloat = min(max(x, 3), w - 3)
+            let bubbleX: CGFloat = min(max(x, 70), w - 70)
             ZStack(alignment: .topLeading) {
                 // Track: the sky, hour by hour.
                 RoundedRectangle(cornerRadius: 9)
@@ -442,7 +446,7 @@ struct HourScrubber: View {
                         .symbolRenderingMode(.palette)
                         .foregroundStyle(Color(hex: 0xFFC44D), muted)
                         .font(.system(size: 11, weight: .bold))
-                        .position(x: w * CGFloat(k) / CGFloat(n), y: trackTop + trackH + 9)
+                        .position(x: spot(k, w, n), y: markerY)
                 }
 
                 // Hour labels.
@@ -450,7 +454,7 @@ struct HourScrubber: View {
                     Text(k == 0 ? "NOW" : label(hours[k].time))
                         .font(.mono(9)).foregroundStyle(muted)
                         .fixedSize()
-                        .position(x: min(max(w * CGFloat(k) / CGFloat(n), 14), w - 14), y: trackTop + trackH + 22)
+                        .position(x: min(max(spot(k, w, n), 14), w - 14), y: labelY)
                         .onTapGesture { if k == 0 { withAnimation { selection = nil } } }
                 }
 
@@ -460,13 +464,13 @@ struct HourScrubber: View {
                     .overlay(RoundedRectangle(cornerRadius: 3).stroke(Color.black.opacity(0.25), lineWidth: 0.5))
                     .frame(width: 6, height: trackH + 10)
                     .shadow(color: .black.opacity(0.35), radius: 3, y: 1)
-                    .position(x: min(max(x, 3), w - 3), y: trackTop + trackH / 2)
+                    .position(x: thumbX, y: trackTop + trackH / 2)
 
                 // Bubble.
                 if selection != nil || dragging, hours.indices.contains(i) {
                     bubble(hours[i], now: i == 0)
                         .fixedSize()
-                        .position(x: min(max(x, 70), w - 70), y: bubbleH / 2)
+                        .position(x: bubbleX, y: bubbleH / 2)
                         .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .bottom)))
                 }
             }
@@ -500,6 +504,8 @@ struct HourScrubber: View {
     }
 
     // MARK: Pieces
+
+    private func spot(_ k: Int, _ w: CGFloat, _ n: Int) -> CGFloat { w * CGFloat(k) / CGFloat(n) }
 
     private func bubble(_ h: HourlyPoint, now: Bool) -> some View {
         HStack(spacing: 6) {

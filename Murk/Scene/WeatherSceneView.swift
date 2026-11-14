@@ -317,7 +317,9 @@ final class WeatherScene: NSObject, UIGestureRecognizerDelegate {
         default:       key = (.white, 1150); amb = (.white, 150)
         }
         // Moonlight comes from where the moon sits (up and behind); by day the rim light is back in its usual spot.
-        let rimAt = SCNVector3(4.6, night ? 8.5 : Float(2.5 + min(max(alt, 0), 60) / 10), -7.5)
+        let dayRimY: Double = 2.5 + min(max(alt, 0), 60) / 10
+        let rimY: Float = night ? 8.5 : Float(dayRimY)
+        let rimAt = SCNVector3(4.6, rimY, -7.5)
         SCNTransaction.begin(); SCNTransaction.animationDuration = 1.2
         keyLight.light?.color = key.0; keyLight.light?.intensity = key.1
         ambLight.light?.color = amb.0; ambLight.light?.intensity = amb.1

@@ -23,281 +23,16 @@ struct SettingsSheet: View {
     var body: some View {
         NavigationStack {
             List {
-                Section {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 12) {
-                            ForEach(Skin.allCases.sorted { !$0.isPremium && $1.isPremium }) { skin in
-                                let on = !state.autoSkin && state.skin == skin
-                                SkinCard(skin: skin, selected: on, locked: skin.isPremium && !state.isPro)
-                                    .onTapGesture { withAnimation { state.choose(skin) } }
-                                    .accessibilityElement(children: .ignore)
-                                    .accessibilityLabel(Text(skin.isPremium && !state.isPro ? "\(skin.name) skin, Murk Pro" : "\(skin.name) skin"))
-                                    .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
-                            }
-                            AutoSkinCard(selected: state.autoSkin, locked: !state.isPro)
-                                .onTapGesture { withAnimation { state.choose(nil) } }
-                                .accessibilityElement(children: .ignore)
-                                .accessibilityLabel(Text(state.isPro ? "Auto skin, follows the weather" : "Auto skin, Murk Pro"))
-                                .accessibilityAddTraits(state.autoSkin ? [.isButton, .isSelected] : .isButton)
-                        }
-                        .padding(.vertical, 4)
-                    }
-                    .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
-                    .listRowBackground(Color.clear)
-                } header: { header("Skins") }
-
-                Section {
-                    // Current Location: says plainly whether it's in use, off, blocked, or standing in with a saved city.
-                    if state.useLocation {
-                        placeRow(icon: state.isFollowingLocation ? "location.fill" : "location.slash",
-                                 title: state.isFollowingLocation ? (state.currentPlace?.name ?? String(localized: "Current Location")) : String(localized: "Current Location"),
-                                 subtitle: locationSubtitle,
-                                 selected: state.isFollowingLocation) {
-                            state.selectCurrentLocation()
-                            dismiss()
-                        }
-                        if state.locationDenied {
-                            Button("Open Settings to allow location") {
-                                if let u = URL(string: UIApplication.openSettingsURLString) { openURL(u) }
-                            }
-                            .font(.footnote)
-                        }
-                    } else {
-                        Button {
-                            state.selectCurrentLocation()
-                            dismiss()
-                        } label: {
-                            Label("Use Current Location", systemImage: "location")
-                        }
-                        .foregroundStyle(state.skin.accent)
-                    }
-                    ForEach(state.places) { place in
-                        placeRow(icon: "mappin", title: place.name,
-                                 subtitle: state.fallbackPlace?.id == place.id ? String(localized: "Showing this while your location isn't available") : nil,
-                                 selected: state.selectedID == place.id || state.fallbackPlace?.id == place.id) {
-                            state.select(place)
-                            dismiss()
-                        }
-                    }
-                    .onDelete { state.remove(at: $0) }
-                    .onMove { state.move(from: $0, to: $1) }
-
-                    if state.places.count + (state.isFollowingLocation ? 1 : 0) > 1 || !state.isPro {
-                        if state.isPro {
-                            NavigationLink {
-                                PlacesOverview(onPick: { dismiss() }).environmentObject(state)
-                            } label: {
-                                Label("All places at a glance", systemImage: "rectangle.stack")
-                            }
-                        } else {
-                            Button { state.paywall = .overview } label: {
-                                HStack {
-                                    Label("All places at a glance", systemImage: "rectangle.stack")
-                                    proBadge
-                                }
-                            }
-                        }
-                    }
-
-                    if adding {
-                        TextField("Search for a city", text: $search.query)
-                            .focused($searchFocused)
-                            .textInputAutocapitalization(.words)
-                            .autocorrectionDisabled()
-                        ForEach(search.results, id: \.self) { r in
-                            Button {
-                                Task {
-                                    if let p = await search.resolve(r) {
-                                        search.query = ""
-                                        adding = false
-                                        if state.add(p) { dismiss() }
-                                    }
-                                }
-                            } label: {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(r.title).foregroundStyle(.primary)
-                                    if !r.subtitle.isEmpty { Text(r.subtitle).font(.caption).foregroundStyle(.secondary) }
-                                }
-                            }
-                        }
-                    } else {
-                        Button {
-                            // A second saved city is where Murk Pro starts.
-                            guard state.canAddPlace else { state.paywall = .city; return }
-                            adding = true
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { searchFocused = true }
-                        } label: {
-                            Label(state.canAddPlace ? "Add a city" : "Add a city · Murk Pro", systemImage: "plus.circle.fill")
-                        }
-                        .foregroundStyle(state.skin.accent)
-                    }
-                    if state.useLocation {
-                        Button("Stop using my location") { state.stopUsingLocation() }.font(.footnote).foregroundStyle(.secondary)
-                    }
-                } header: { header("Locations") } footer: {
-                    Text("Murk asks for your location only when you choose Use Current Location, and only while the app is open. Saved cities always work without it.")
-                }
-
-                Section {
-                    Picker(selection: $state.unit) {
-                        ForEach(TempUnit.allCases) { Text($0.symbol).tag($0) }
-                    } label: { Label("Units", systemImage: "thermometer.medium") }
-                    .pickerStyle(.segmented)
-                    Toggle(isOn: $state.minimal) { Label("Minimal mode", systemImage: "eye.slash") }
-                    Toggle(isOn: $state.alerts) { Label("Heads-up pill", systemImage: "exclamationmark.triangle") }
-                    Toggle(isOn: $state.sound) { Label("Weather sounds", systemImage: "speaker.wave.2") }
-                    Toggle(isOn: $state.approximateLocation) { Label("Approximate location", systemImage: "scope") }
-                } header: { header("Settings") } footer: {
-                    Text("Approximate location rounds your coordinates to about 11 km (7 mi) before they are sent to the weather services. Forecasts stay close; alerts near a county line may be missed.")
-                }
-                .tint(state.skin.accent)
-
-                Section {
-                    ruleToggle("Official weather alerts", "exclamationmark.triangle.fill", pro: false, isOn: state.rules.official) { $0.official = $1 }
-                    ruleToggle("Rain on the way", "cloud.rain.fill", pro: true, isOn: state.rules.rain) { $0.rain = $1 }
-                    if state.rules.rain && state.isPro {
-                        Stepper("At \(state.rules.rainChance)% chance or more", value: $state.rules.rainChance, in: 30...90, step: 10).font(.footnote)
-                    }
-                    ruleToggle("Strong gusts", "wind", pro: true, isOn: state.rules.wind) { $0.wind = $1 }
-                    if state.rules.wind && state.isPro {
-                        Stepper("At \(state.unit.wind(state.rules.gustKmh).lowercased()) or more", value: $state.rules.gustKmh, in: 30...110, step: 10).font(.footnote)
-                    }
-                    ruleToggle("Poor air quality", "aqi.medium", pro: true, isOn: state.rules.aqi) { $0.aqi = $1 }
-                    if state.rules.aqi && state.isPro {
-                        Stepper("At AQI \(state.rules.aqiLevel) or more", value: $state.rules.aqiLevel, in: 51...201, step: 50).font(.footnote)
-                    }
-                    ruleToggle("High UV", "sun.max.trianglebadge.exclamationmark", pro: true, isOn: state.rules.uv) { $0.uv = $1 }
-                    if state.rules.uv && state.isPro {
-                        Stepper("At UV \(Int(state.rules.uvLevel)) or more", value: $state.rules.uvLevel, in: 3...11, step: 1).font(.footnote)
-                    }
-                    if notificationsBlocked {
-                        Button("Notifications are off for Murk. Open Settings to allow them.") {
-                            if let u = URL(string: UIApplication.openSettingsURLString) { openURL(u) }
-                        }
-                        .font(.footnote)
-                    }
-                } header: { header("Notify me about") } footer: {
-                    Text("Notifications are for the place Murk is showing. They are checked when Murk refreshes, including in the background when iOS allows, so they can arrive late. Official alerts come from the US National Weather Service.")
-                }
-                .tint(state.skin.accent)
-
-                Section {
-                    Button { state.paywall = .general } label: {
-                        HStack {
-                            Label(state.isPro ? "Murk Pro is active" : "Murk Pro", systemImage: state.isPro ? "checkmark.seal.fill" : "sparkles")
-                            Spacer()
-                            if !state.isPro { Text("See what's included").font(.footnote).foregroundStyle(.secondary) }
-                        }
-                    }
-                    Button("Restore Purchases") { Task { await store.restore() } }
-                    Button("Manage Subscription") { manageSubscription = true }
-                    if let m = store.message { Text(m).font(.footnote).foregroundStyle(.secondary) }
-                    #if DEBUG
-                    Toggle("Debug: unlock Pro (test builds only)", isOn: Binding(get: { store.debugUnlock }, set: { store.debugUnlock = $0 }))
-                    #endif
-                } header: { header("Murk Pro") }
-                .tint(state.skin.accent)
-
-                Section {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 14) {
-                            ForEach(AppIcon.allCases) { choice in
-                                let locked = choice.isPremium && !state.isPro
-                                Button {
-                                    if locked { state.paywall = .icon; return }
-                                    Task { if await AppIcon.set(choice) { icon = choice } }
-                                } label: {
-                                    VStack(spacing: 6) {
-                                        Image(choice.previewImage).resizable().frame(width: 64, height: 64)
-                                            .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-                                            .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(icon == choice ? Color.white : .clear, lineWidth: 3))
-                                            .overlay(alignment: .topTrailing) {
-                                                if locked { Image(systemName: "lock.fill").font(.system(size: 10, weight: .bold)).padding(5).background(Circle().fill(.black.opacity(0.6))).padding(3) }
-                                            }
-                                        HStack(spacing: 3) {
-                                            if icon == choice { Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)) }
-                                            Text(choice.name).font(.caption2)
-                                        }
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel(Text(locked ? "\(choice.name) icon, Murk Pro" : "\(choice.name) icon"))
-                                .accessibilityAddTraits(icon == choice ? .isSelected : [])
-                            }
-                        }
-                        .padding(.vertical, 4)
-                    }
-                } header: { header("App icon") }
-
-                if CloudSync.isAvailableInThisBuild {
-                    Section {
-                        Toggle(isOn: Binding(get: { cloud.enabled && state.isPro }, set: { on in
-                            if on && !state.isPro { state.paywall = .sync; return }
-                            if on { cloud.turnOn(current: state.syncedSettings, isPro: state.isPro) } else { cloud.enabled = false }
-                        })) {
-                            HStack {
-                                Label("Sync with iCloud", systemImage: "icloud")
-                                if !state.isPro { proBadge }
-                            }
-                        }
-                        if cloud.enabled, let t = cloud.lastSynced {
-                            Text("Last synced \(t.formatted(date: .abbreviated, time: .shortened))").font(.footnote).foregroundStyle(.secondary)
-                        }
-                        Button("Reset synced data", role: .destructive) { confirmReset = true }
-                    } header: { header("iCloud") } footer: {
-                        Text("Keeps your saved cities and preferences the same on your devices. They are stored in your own private iCloud account; Murk has no server and never syncs where you are or have been. Murk works the same with this off.")
-                    }
-                    .tint(state.skin.accent)
-                }
-
-                Section {
-                    Button {
-                        makeWallpaper()
-                    } label: {
-                        HStack {
-                            Label("Save weather wallpaper", systemImage: "photo.on.rectangle.angled")
-                            Spacer()
-                            if makingWallpaper { ProgressView() }
-                        }
-                    }
-                    .disabled(state.forecast == nil || makingWallpaper)
-                    if let wallpaperNote {
-                        Text(wallpaperNote).font(.footnote).foregroundStyle(.secondary)
-                    }
-                } header: { header("Wallpaper") } footer: {
-                    Text("Renders today's 3D weather as a lock-screen wallpaper and saves it to Photos. Set it from Photos → Share → Use as Wallpaper.")
-                }
-
-                if let f = state.forecast, !f.daily.isEmpty {
-                    let hot = f.daily.max { $0.high < $1.high }!
-                    let cold = f.daily.min { $0.low < $1.low }!
-                    let wet = f.daily.max { $0.precipChance < $1.precipChance }!
-                    Section {
-                        stat("flame.fill", "Hottest", "\(state.unit.temp(hot.high))° \(label(hot, f))")
-                        stat("snowflake", "Coolest", "\(state.unit.temp(cold.low))° \(label(cold, f))")
-                        stat("umbrella.fill", "Wettest", "\(wet.precipChance)% \(label(wet, f))")
-                    } header: { header("This week · \(f.place.name)") }
-                }
-
-                Section {
-                    VStack(spacing: 6) {
-                        Text("Murk").font(.display(22))
-                        Text("Weather with Atmosphere.").foregroundStyle(.secondary)
-                        if let st = state.status() { Text(st.text.capitalized).font(.caption2).foregroundStyle(.secondary).multilineTextAlignment(.center) }
-                        Link("Forecast and air quality by Open-Meteo.com", destination: URL(string: ProviderConfig.current.attributionURL)!)
-                            .font(.footnote)
-                        Link("US alerts by the National Weather Service", destination: URL(string: "https://www.weather.gov")!)
-                            .font(.footnote)
-                        HStack(spacing: 18) {
-                            Link("Privacy Policy", destination: Legal.privacy)
-                            Link("Terms of Use", destination: Legal.terms)
-                            Link("Support", destination: Legal.support)
-                        }
-                        .font(.footnote)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .listRowBackground(Color.clear)
-                }
+                skinsSection
+                locationsSection
+                preferencesSection
+                notificationsSection
+                proSection
+                iconSection
+                cloudSection
+                wallpaperSection
+                statsSection
+                aboutSection
             }
             .scrollContentBackground(.hidden)
             .background {
@@ -340,6 +75,314 @@ struct SettingsSheet: View {
         }
         .preferredColorScheme(.dark)
         .presentationDragIndicator(.visible)
+    }
+
+    // MARK: Sections (kept small so each type-checks quickly on every Xcode version)
+
+    @ViewBuilder
+    private var skinsSection: some View {
+        Section {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(Skin.allCases.sorted { !$0.isPremium && $1.isPremium }) { skin in
+                        let on = !state.autoSkin && state.skin == skin
+                        SkinCard(skin: skin, selected: on, locked: skin.isPremium && !state.isPro)
+                            .onTapGesture { withAnimation { state.choose(skin) } }
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel(Text(skin.isPremium && !state.isPro ? "\(skin.name) skin, Murk Pro" : "\(skin.name) skin"))
+                            .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+                    }
+                    AutoSkinCard(selected: state.autoSkin, locked: !state.isPro)
+                        .onTapGesture { withAnimation { state.choose(nil) } }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(Text(state.isPro ? "Auto skin, follows the weather" : "Auto skin, Murk Pro"))
+                        .accessibilityAddTraits(state.autoSkin ? [.isButton, .isSelected] : .isButton)
+                }
+                .padding(.vertical, 4)
+            }
+            .listRowInsets(EdgeInsets(top: 4, leading: 12, bottom: 4, trailing: 12))
+            .listRowBackground(Color.clear)
+        } header: { header("Skins") }
+    }
+
+    @ViewBuilder
+    private var locationsSection: some View {
+        Section {
+            // Current Location: says plainly whether it's in use, off, blocked, or standing in with a saved city.
+            if state.useLocation {
+                placeRow(icon: state.isFollowingLocation ? "location.fill" : "location.slash",
+                         title: state.isFollowingLocation ? (state.currentPlace?.name ?? String(localized: "Current Location")) : String(localized: "Current Location"),
+                         subtitle: locationSubtitle,
+                         selected: state.isFollowingLocation) {
+                    state.selectCurrentLocation()
+                    dismiss()
+                }
+                if state.locationDenied {
+                    Button("Open Settings to allow location") {
+                        if let u = URL(string: UIApplication.openSettingsURLString) { openURL(u) }
+                    }
+                    .font(.footnote)
+                }
+            } else {
+                Button {
+                    state.selectCurrentLocation()
+                    dismiss()
+                } label: {
+                    Label("Use Current Location", systemImage: "location")
+                }
+                .foregroundStyle(state.skin.accent)
+            }
+            ForEach(state.places) { place in
+                placeRow(icon: "mappin", title: place.name,
+                         subtitle: state.fallbackPlace?.id == place.id ? String(localized: "Showing this while your location isn't available") : nil,
+                         selected: state.selectedID == place.id || state.fallbackPlace?.id == place.id) {
+                    state.select(place)
+                    dismiss()
+                }
+            }
+            .onDelete { state.remove(at: $0) }
+            .onMove { state.move(from: $0, to: $1) }
+
+            if state.places.count + (state.isFollowingLocation ? 1 : 0) > 1 || !state.isPro {
+                if state.isPro {
+                    NavigationLink {
+                        PlacesOverview(onPick: { dismiss() }).environmentObject(state)
+                    } label: {
+                        Label("All places at a glance", systemImage: "rectangle.stack")
+                    }
+                } else {
+                    Button { state.paywall = .overview } label: {
+                        HStack {
+                            Label("All places at a glance", systemImage: "rectangle.stack")
+                            proBadge
+                        }
+                    }
+                }
+            }
+
+            if adding {
+                TextField("Search for a city", text: $search.query)
+                    .focused($searchFocused)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                ForEach(search.results, id: \.self) { r in
+                    Button {
+                        Task {
+                            if let p = await search.resolve(r) {
+                                search.query = ""
+                                adding = false
+                                if state.add(p) { dismiss() }
+                            }
+                        }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(r.title).foregroundStyle(.primary)
+                            if !r.subtitle.isEmpty { Text(r.subtitle).font(.caption).foregroundStyle(.secondary) }
+                        }
+                    }
+                }
+            } else {
+                Button {
+                    // A second saved city is where Murk Pro starts.
+                    guard state.canAddPlace else { state.paywall = .city; return }
+                    adding = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { searchFocused = true }
+                } label: {
+                    Label(state.canAddPlace ? "Add a city" : "Add a city · Murk Pro", systemImage: "plus.circle.fill")
+                }
+                .foregroundStyle(state.skin.accent)
+            }
+            if state.useLocation {
+                Button("Stop using my location") { state.stopUsingLocation() }.font(.footnote).foregroundStyle(.secondary)
+            }
+        } header: { header("Locations") } footer: {
+            Text("Murk asks for your location only when you choose Use Current Location, and only while the app is open. Saved cities always work without it.")
+        }
+    }
+
+    @ViewBuilder
+    private var preferencesSection: some View {
+        Section {
+            Picker(selection: $state.unit) {
+                ForEach(TempUnit.allCases) { Text($0.symbol).tag($0) }
+            } label: { Label("Units", systemImage: "thermometer.medium") }
+            .pickerStyle(.segmented)
+            Toggle(isOn: $state.minimal) { Label("Minimal mode", systemImage: "eye.slash") }
+            Toggle(isOn: $state.alerts) { Label("Heads-up pill", systemImage: "exclamationmark.triangle") }
+            Toggle(isOn: $state.sound) { Label("Weather sounds", systemImage: "speaker.wave.2") }
+            Toggle(isOn: $state.approximateLocation) { Label("Approximate location", systemImage: "scope") }
+        } header: { header("Settings") } footer: {
+            Text("Approximate location rounds your coordinates to about 11 km (7 mi) before they are sent to the weather services. Forecasts stay close; alerts near a county line may be missed.")
+        }
+        .tint(state.skin.accent)
+    }
+
+    @ViewBuilder
+    private var notificationsSection: some View {
+        Section {
+            ruleToggle("Official weather alerts", "exclamationmark.triangle.fill", pro: false, isOn: state.rules.official) { $0.official = $1 }
+            ruleToggle("Rain on the way", "cloud.rain.fill", pro: true, isOn: state.rules.rain) { $0.rain = $1 }
+            if state.rules.rain && state.isPro {
+                Stepper("At \(state.rules.rainChance)% chance or more", value: $state.rules.rainChance, in: 30...90, step: 10).font(.footnote)
+            }
+            ruleToggle("Strong gusts", "wind", pro: true, isOn: state.rules.wind) { $0.wind = $1 }
+            if state.rules.wind && state.isPro {
+                Stepper("At \(state.unit.wind(state.rules.gustKmh).lowercased()) or more", value: $state.rules.gustKmh, in: 30...110, step: 10).font(.footnote)
+            }
+            ruleToggle("Poor air quality", "aqi.medium", pro: true, isOn: state.rules.aqi) { $0.aqi = $1 }
+            if state.rules.aqi && state.isPro {
+                Stepper("At AQI \(state.rules.aqiLevel) or more", value: $state.rules.aqiLevel, in: 51...201, step: 50).font(.footnote)
+            }
+            ruleToggle("High UV", "sun.max.trianglebadge.exclamationmark", pro: true, isOn: state.rules.uv) { $0.uv = $1 }
+            if state.rules.uv && state.isPro {
+                Stepper("At UV \(Int(state.rules.uvLevel)) or more", value: $state.rules.uvLevel, in: 3...11, step: 1).font(.footnote)
+            }
+            if notificationsBlocked {
+                Button("Notifications are off for Murk. Open Settings to allow them.") {
+                    if let u = URL(string: UIApplication.openSettingsURLString) { openURL(u) }
+                }
+                .font(.footnote)
+            }
+        } header: { header("Notify me about") } footer: {
+            Text("Notifications are for the place Murk is showing. They are checked when Murk refreshes, including in the background when iOS allows, so they can arrive late. Official alerts come from the US National Weather Service.")
+        }
+        .tint(state.skin.accent)
+    }
+
+    @ViewBuilder
+    private var proSection: some View {
+        Section {
+            Button { state.paywall = .general } label: {
+                HStack {
+                    Label(state.isPro ? "Murk Pro is active" : "Murk Pro", systemImage: state.isPro ? "checkmark.seal.fill" : "sparkles")
+                    Spacer()
+                    if !state.isPro { Text("See what's included").font(.footnote).foregroundStyle(.secondary) }
+                }
+            }
+            Button("Restore Purchases") { Task { await store.restore() } }
+            Button("Manage Subscription") { manageSubscription = true }
+            if let m = store.message { Text(m).font(.footnote).foregroundStyle(.secondary) }
+            #if DEBUG
+            Toggle("Debug: unlock Pro (test builds only)", isOn: Binding(get: { store.debugUnlock }, set: { store.debugUnlock = $0 }))
+            #endif
+        } header: { header("Murk Pro") }
+        .tint(state.skin.accent)
+    }
+
+    @ViewBuilder
+    private var iconSection: some View {
+        Section {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 14) {
+                    ForEach(AppIcon.allCases) { choice in
+                        let locked = choice.isPremium && !state.isPro
+                        Button {
+                            if locked { state.paywall = .icon; return }
+                            Task { if await AppIcon.set(choice) { icon = choice } }
+                        } label: {
+                            VStack(spacing: 6) {
+                                Image(choice.previewImage).resizable().frame(width: 64, height: 64)
+                                    .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+                                    .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(icon == choice ? Color.white : .clear, lineWidth: 3))
+                                    .overlay(alignment: .topTrailing) {
+                                        if locked { Image(systemName: "lock.fill").font(.system(size: 10, weight: .bold)).padding(5).background(Circle().fill(.black.opacity(0.6))).padding(3) }
+                                    }
+                                HStack(spacing: 3) {
+                                    if icon == choice { Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)) }
+                                    Text(choice.name).font(.caption2)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(Text(locked ? "\(choice.name) icon, Murk Pro" : "\(choice.name) icon"))
+                        .accessibilityAddTraits(icon == choice ? .isSelected : [])
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+        } header: { header("App icon") }
+    }
+
+    @ViewBuilder
+    private var cloudSection: some View {
+        if CloudSync.isAvailableInThisBuild {
+            Section {
+                Toggle(isOn: Binding(get: { cloud.enabled && state.isPro }, set: { on in
+                    if on && !state.isPro { state.paywall = .sync; return }
+                    if on { cloud.turnOn(current: state.syncedSettings, isPro: state.isPro) } else { cloud.enabled = false }
+                })) {
+                    HStack {
+                        Label("Sync with iCloud", systemImage: "icloud")
+                        if !state.isPro { proBadge }
+                    }
+                }
+                if cloud.enabled, let t = cloud.lastSynced {
+                    Text("Last synced \(t.formatted(date: .abbreviated, time: .shortened))").font(.footnote).foregroundStyle(.secondary)
+                }
+                Button("Reset synced data", role: .destructive) { confirmReset = true }
+            } header: { header("iCloud") } footer: {
+                Text("Keeps your saved cities and preferences the same on your devices. They are stored in your own private iCloud account; Murk has no server and never syncs where you are or have been. Murk works the same with this off.")
+            }
+            .tint(state.skin.accent)
+        }
+    }
+
+    @ViewBuilder
+    private var wallpaperSection: some View {
+        Section {
+            Button {
+                makeWallpaper()
+            } label: {
+                HStack {
+                    Label("Save weather wallpaper", systemImage: "photo.on.rectangle.angled")
+                    Spacer()
+                    if makingWallpaper { ProgressView() }
+                }
+            }
+            .disabled(state.forecast == nil || makingWallpaper)
+            if let wallpaperNote {
+                Text(wallpaperNote).font(.footnote).foregroundStyle(.secondary)
+            }
+        } header: { header("Wallpaper") } footer: {
+            Text("Renders today's 3D weather as a lock-screen wallpaper and saves it to Photos. Set it from Photos → Share → Use as Wallpaper.")
+        }
+    }
+
+    @ViewBuilder
+    private var statsSection: some View {
+        if let f = state.forecast, !f.daily.isEmpty {
+            let hot = f.daily.max { $0.high < $1.high }!
+            let cold = f.daily.min { $0.low < $1.low }!
+            let wet = f.daily.max { $0.precipChance < $1.precipChance }!
+            Section {
+                stat("flame.fill", "Hottest", "\(state.unit.temp(hot.high))° \(label(hot, f))")
+                stat("snowflake", "Coolest", "\(state.unit.temp(cold.low))° \(label(cold, f))")
+                stat("umbrella.fill", "Wettest", "\(wet.precipChance)% \(label(wet, f))")
+            } header: { header("This week · \(f.place.name)") }
+        }
+    }
+
+    @ViewBuilder
+    private var aboutSection: some View {
+        Section {
+            VStack(spacing: 6) {
+                Text("Murk").font(.display(22))
+                Text("Weather with Atmosphere.").foregroundStyle(.secondary)
+                if let st = state.status() { Text(st.text.capitalized).font(.caption2).foregroundStyle(.secondary).multilineTextAlignment(.center) }
+                Link("Forecast and air quality by Open-Meteo.com", destination: URL(string: ProviderConfig.current.attributionURL)!)
+                    .font(.footnote)
+                Link("US alerts by the National Weather Service", destination: URL(string: "https://www.weather.gov")!)
+                    .font(.footnote)
+                HStack(spacing: 18) {
+                    Link("Privacy Policy", destination: Legal.privacy)
+                    Link("Terms of Use", destination: Legal.terms)
+                    Link("Support", destination: Legal.support)
+                }
+                .font(.footnote)
+            }
+            .frame(maxWidth: .infinity)
+            .listRowBackground(Color.clear)
+        }
     }
 
     // MARK: Pieces
