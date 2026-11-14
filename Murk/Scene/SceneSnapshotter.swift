@@ -22,7 +22,8 @@ enum SceneSnapshotter {
         lock.unlock()
         guard started else { return }
 
-        Task.detached(priority: .utility) {
+        // A plain background queue: this is synchronous rendering work, not async code.
+        DispatchQueue.global(qos: .utility).async {
             defer { lock.lock(); busy.remove(key); lock.unlock() }
             let age = Astronomy.moonAge()
             var order: [(ArtKind, Bool)] = []
