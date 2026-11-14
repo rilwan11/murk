@@ -189,7 +189,7 @@ final class ProTests: XCTestCase {
 
         state.useLocation = false
         state.select(Fixture.ny)                                 // existing saved cities keep working for free
-        await wait(0.2)
+        await pause(0.2)
         XCTAssertEqual(state.forecast?.place.name, "New York")
         XCTAssertNil(state.paywall)
     }

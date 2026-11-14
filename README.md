@@ -1,6 +1,8 @@
-# Murk
+# Murk: Weather with Atmosphere
 
-A moody 3D weather app for iPhone, built with SwiftUI and SceneKit.
+*Weather with Atmosphere.* A 3D weather app for iPhone, built with SwiftUI and SceneKit.
+
+Docs: [Privacy Policy](PRIVACY.md) · [Terms of Use](TERMS.md) · [Changelog](CHANGELOG.md) · [App Store readiness](docs/APP_STORE.md)
 
 - **3D Now screen.** The cloud, the sun or moon, and the temperature are real 3D objects. Drag to spin them in any direction (it rotates all the way over the top and underneath), pinch to zoom, tap to grow a new cloud, and tap ↺ to reset the view.
 - **Live weather** from [Open-Meteo](https://open-meteo.com). It's free and needs no API key or account.

@@ -12,7 +12,7 @@ final class StaleRequestTests: XCTestCase {
 
         state.select(Fixture.la)
         state.select(Fixture.ny)          // switch before the first answer arrives
-        await wait(0.8)
+        await pause(0.8)
 
         XCTAssertEqual(state.forecast?.place.name, "New York")
         XCTAssertNil(state.failure)       // Los Angeles's error was dropped
@@ -27,7 +27,7 @@ final class StaleRequestTests: XCTestCase {
 
         state.select(Fixture.la)
         state.select(Fixture.ny)
-        await wait(0.8)
+        await pause(0.8)
         XCTAssertEqual(state.forecast?.place.name, "New York")
         XCTAssertEqual(state.forecast?.aqi, 42)       // optional data attached to the right city
     }
@@ -40,10 +40,10 @@ final class StaleRequestTests: XCTestCase {
 
         state.select(Fixture.la)
         state.select(Fixture.ny)
-        await wait(0.25)                  // the old request has finished; the new one hasn't
+        await pause(0.25)                  // the old request has finished; the new one hasn't
         XCTAssertTrue(state.isLoading)
         XCTAssertNil(state.forecast)      // not Los Angeles's weather under New York's name
-        await wait(0.6)
+        await pause(0.6)
         XCTAssertFalse(state.isLoading)
         XCTAssertEqual(state.forecast?.place.name, "New York")
     }
@@ -56,7 +56,7 @@ final class StaleRequestTests: XCTestCase {
         state.useLocation = false
 
         for _ in 0..<5 { state.select(Fixture.la); state.select(Fixture.ny) }
-        await wait(0.4)
+        await pause(0.4)
         XCTAssertEqual(state.failure, .offline)
         XCTAssertEqual(state.forecast?.place.name, "New York")     // the saved forecast stays on screen
         XCTAssertEqual(state.forecast?.isCached, true)
@@ -72,10 +72,10 @@ final class StaleRequestTests: XCTestCase {
         state.useLocation = false
         state.select(Fixture.la)
         state.refreshIfStale(); state.refreshIfStale(); state.refreshIfStale()     // while loading
-        await wait(0.5)
+        await pause(0.5)
         XCTAssertEqual(weather.coreCalls, 1)
         state.refreshIfStale()                                                    // fresh forecast: nothing to do
-        await wait(0.1)
+        await pause(0.1)
         XCTAssertEqual(weather.coreCalls, 1)
     }
 
@@ -86,11 +86,11 @@ final class StaleRequestTests: XCTestCase {
         let state = makeState(weather: weather)
         state.useLocation = false
         state.select(Fixture.la)
-        await wait(0.1)
+        await pause(0.1)
         XCTAssertEqual(state.forecast?.isCached, true)
         XCTAssertTrue(state.isLoading)
         XCTAssertTrue(state.status()!.text.contains("REFRESHING"))
-        await wait(0.5)
+        await pause(0.5)
         XCTAssertEqual(state.forecast?.isCached, false)
         XCTAssertTrue(state.status()!.text.contains("UPDATED"))
     }
@@ -108,7 +108,7 @@ final class LocationStateTests: XCTestCase {
         XCTAssertFalse(state.isFollowingLocation)
 
         state.selectCurrentLocation()
-        await wait(0.3)
+        await pause(0.3)
         XCTAssertEqual(location.calls, 1)
         XCTAssertTrue(state.isFollowingLocation)
         XCTAssertEqual(state.forecast?.place.name, "Here")
@@ -134,7 +134,7 @@ final class LocationStateTests: XCTestCase {
         XCTAssertEqual(state.locationProblem, .denied)
         XCTAssertEqual(state.cityIDs.count, 2)                // current location is not offered in the swipe order
         state.select(Fixture.ny)
-        await wait(0.2)
+        await pause(0.2)
         XCTAssertEqual(state.forecast?.place.name, "New York")
     }
 
@@ -167,14 +167,14 @@ final class DeadlineTests: XCTestCase {
             XCTAssertFalse(shot.resume(with: .failure(Deadline.TimedOut())))
         }
         XCTAssertEqual(v, 7)
-        await wait(0.05)
+        await pause(0.05)
         XCTAssertEqual(later?.isFinished, true)
         XCTAssertEqual(later?.resume(with: .success(9)), false)
     }
 
     func testCancellationEndsTheWait() async {
         let task = Task { () -> Int in try await Deadline.run(seconds: 30) { _ in } }
-        await wait(0.05)
+        await pause(0.05)
         task.cancel()
         let start = Date()
         do { _ = try await task.value; XCTFail("should be cancelled") }
@@ -186,7 +186,7 @@ final class DeadlineTests: XCTestCase {
         final class Box: @unchecked Sendable { var n = 0 }
         let box = Box()
         _ = try? await Deadline.run(seconds: 0.05) { (shot: OneShot<Int>) in shot.onFinish { box.n += 1 } }
-        await wait(0.1)
+        await pause(0.1)
         XCTAssertEqual(box.n, 1)
     }
 

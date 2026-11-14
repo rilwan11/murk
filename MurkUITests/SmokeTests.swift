@@ -23,8 +23,11 @@ final class SmokeTests: XCTestCase {
         let app = launch("online")
         XCTAssertTrue(app.buttons["settingsButton"].waitForExistence(timeout: 20))
         app.buttons["settingsButton"].tap()
-        XCTAssertTrue(app.buttons["Use Current Location"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["Restore Purchases"].exists || app.staticTexts["Restore Purchases"].exists)
+        XCTAssertTrue(app.navigationBars["Murk"].waitForExistence(timeout: 20))
+        let useLocation = NSPredicate(format: "label CONTAINS[c] 'Use Current Location'")
+        XCTAssertTrue(app.descendants(matching: .any).matching(useLocation).firstMatch.waitForExistence(timeout: 20))
+        let addCity = NSPredicate(format: "label CONTAINS[c] 'Add a city'")
+        XCTAssertTrue(app.descendants(matching: .any).matching(addCity).firstMatch.exists)
     }
 
     func testWidgetLinkOpensTheApp() {

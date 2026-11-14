@@ -81,6 +81,6 @@ func makeState(weather: FakeWeather = FakeWeather(), location: FakeLocation = Fa
     return AppState(repository: weather, location: location, defaults: defaults, effects: effects)
 }
 
-func wait(_ seconds: Double) async {
+func pause(_ seconds: Double) async {
     try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
 }
