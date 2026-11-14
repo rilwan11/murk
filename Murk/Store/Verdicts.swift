@@ -77,6 +77,11 @@ enum Verdicts {
             let spell = ahead[start...].prefix { isWet($0) }
             let total = spell.reduce(0) { $0 + $1.precip }
             let w = (h.snowfall ?? 0) > 0 ? String(localized: "Snow") : word
+            if h.time <= now {
+                // The hour already under way: it isn't "starting at 1 PM" when it's 1:24.
+                let amount = total >= 0.1 ? String(localized: ", about \(unit.precip(total).lowercased())") : ""
+                return Verdict(big: String(localized: "Now"), line: "\(w) " + String(localized: "possible this hour") + amount)
+            }
             let when = dayWord(h.time, now: now, tz) + String(localized: "around ") + hourWord(h.time, tz)
             let amount = total >= 0.1 ? String(localized: ", about \(unit.precip(total).lowercased())") : ""
             return Verdict(big: hourWord(h.time, tz), line: "\(w) " + String(localized: "starts \(when)") + amount)

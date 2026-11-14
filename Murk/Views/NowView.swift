@@ -240,14 +240,10 @@ struct NowView: View {
         let count = state.cityIDs.count
         return VStack(spacing: 4) {
             HStack {
-                Button { state.cycleCity(-1) } label: {
-                    Image(systemName: "chevron.left").font(.system(size: 15, weight: .bold)).frame(width: 44, height: 44)
-                }
-                .opacity(count > 1 ? 0.6 : 0).disabled(count < 2)
-                .accessibilityLabel("Previous place")
-                .accessibilityHidden(count < 2)
+                // Keeps the name centered opposite the settings button.
+                Color.clear.frame(width: 44, height: 44)
                 Spacer()
-                Button { showSettings = true } label: {
+                Button { switchPlace() } label: {
                     HStack(spacing: 6) {
                         if state.forecast?.place.isCurrentLocation == true {
                             Image(systemName: "location.fill").font(.system(size: 13, weight: .bold))
@@ -257,7 +253,7 @@ struct NowView: View {
                     }
                     .offset(x: headerDrag * 0.4)
                 }
-                .accessibilityHint("Opens places and settings")
+                .accessibilityHint(count > 1 ? "Switches to the next place" : (state.useLocation ? "" : "Shows the weather where you are"))
                 .accessibilityIdentifier("placeName")
                 Spacer()
                 Button { showSettings = true } label: {
@@ -286,6 +282,18 @@ struct NowView: View {
                 if v.translation.width < -50 { state.cycleCity(1) } else if v.translation.width > 50 { state.cycleCity(-1) }
             })
         .noPageSwipe(page: 0)
+    }
+
+    /// Tapping the place name moves to the next place (your location and saved cities, in order).
+    /// With only one place and location off, it switches to where you are. Settings has its own button.
+    private func switchPlace() {
+        if state.cityIDs.count > 1 {
+            state.cycleCity(1)
+        } else if !state.useLocation {
+            state.selectCurrentLocation()
+        } else {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        }
     }
 
     private var footer: some View {

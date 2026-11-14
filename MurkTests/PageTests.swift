@@ -163,3 +163,13 @@ final class VerdictTests: XCTestCase {
         XCTAssertTrue((WeatherAPI.airQualityURL(Fixture.la, config: .openMeteoFree).query ?? "").contains("hourly=us_aqi"))
     }
 }
+
+final class RainNowTests: XCTestCase {
+    func testRainDueThisHourIsNow() {
+        let now = Fixture.date(2026, 6, 10, 13).addingTimeInterval(24 * 60)     // 1:24 PM
+        let f = Fixture.forecast(Fixture.la, now: now, rainFromHour: 13)
+        let v = Verdicts.rain(f, now: now, unit: .fahrenheit)
+        XCTAssertEqual(v.big, "Now")
+        XCTAssertTrue(v.line.hasPrefix("Rain possible this hour"), v.line)
+    }
+}
