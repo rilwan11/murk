@@ -10,6 +10,8 @@ struct WeatherEntry: TimelineEntry {
     let unit: TempUnit
     let skin: Skin
     var look: WidgetLook = .sky
+    /// Why there's no forecast, when there isn't one.
+    var reason: String? = nil
 }
 
 // MARK: - Editing a widget (place and style are part of Murk Pro)
@@ -71,7 +73,7 @@ struct Provider: AppIntentTimelineProvider {
         // Same forecast, but the sky behind it keeps moving through the next hour.
         let entries = (0..<4).map { i in
             WeatherEntry(date: first.date.addingTimeInterval(Double(i) * 15 * 60), forecast: first.forecast,
-                         unit: first.unit, skin: first.skin, look: first.look)
+                         unit: first.unit, skin: first.skin, look: first.look, reason: first.reason)
         }
         // Refresh every 30 minutes (iOS may stretch this to save battery).
         return Timeline(entries: entries, policy: .after(Date().addingTimeInterval(30 * 60)))
@@ -82,6 +84,13 @@ struct Provider: AppIntentTimelineProvider {
     private func load(_ configuration: MurkWidgetIntent) async -> WeatherEntry {
         let choice = WidgetChoice.resolve(placeID: configuration.place?.id, look: configuration.style.look,
                                           isPro: SharedStore.isPro, places: SharedStore.places)
+        return await WidgetLoader.load(choice)
+    }
+}
+
+/// Shared by every Murk widget: the app's saved forecast first, one short fetch only when it's missing or old.
+enum WidgetLoader {
+    static func load(_ choice: (place: SharedPlace?, look: WidgetLook)) async -> WeatherEntry {
         // A widget pinned to a city keeps its own snapshot; otherwise it follows the app.
         let url = choice.place.flatMap { WidgetSnapshot.url(placeID: $0.id) } ?? WidgetSnapshot.defaultURL
         let place = choice.place?.place ?? SharedStore.place
@@ -93,16 +102,33 @@ struct Provider: AppIntentTimelineProvider {
         var repo = WeatherRepository()
         repo.firstTimeout = 8
         repo.allowRetry = false
-        if let f = try? await repo.core(for: place) {
+        var failure: WeatherError?
+        do {
+            let f = try await repo.core(for: place)
             let s = WidgetSnapshot(forecast: f, unit: SharedStore.unit, skin: SharedStore.skin)
             s.save(to: url)
             return entry(s, choice.look)
+        } catch {
+            failure = error as? WeatherError
         }
         if let s = saved, s.isUsable() { return entry(s, choice.look) }     // offline: the last forecast still beats nothing
-        return WeatherEntry(date: .now, forecast: nil, unit: SharedStore.unit, skin: SharedStore.skin, look: choice.look)
+        return WeatherEntry(date: .now, forecast: nil, unit: SharedStore.unit, skin: SharedStore.skin, look: choice.look,
+                            reason: reason(failure, hasContainer: url != nil))
     }
 
-    private func entry(_ s: WidgetSnapshot, _ look: WidgetLook) -> WeatherEntry {
+    /// Says why the widget is empty, so it never just sits blank.
+    static func reason(_ e: WeatherError?, hasContainer: Bool) -> String {
+        if !hasContainer { return String(localized: "Open Murk once to share the forecast with widgets") }
+        switch e {
+        case .offline?: return String(localized: "Offline. Murk updates when you're back online")
+        case .timedOut?: return String(localized: "The forecast took too long. Trying again soon")
+        case .provider?: return String(localized: "Forecast service unavailable. Trying again soon")
+        case .badData?: return String(localized: "Couldn't read the forecast. Trying again soon")
+        case nil: return String(localized: "Open Murk to load the forecast")
+        }
+    }
+
+    static func entry(_ s: WidgetSnapshot, _ look: WidgetLook) -> WeatherEntry {
         // Units and skin always follow the app's current settings.
         WeatherEntry(date: .now, forecast: s.forecast, unit: SharedStore.unit, skin: SharedStore.skin, look: look)
     }
@@ -112,7 +138,13 @@ struct Provider: AppIntentTimelineProvider {
 
 @main
 struct MurkWidgetBundle: WidgetBundle {
-    var body: some Widget { MurkWeatherWidget() }
+    var body: some Widget {
+        MurkWeatherWidget()
+        MurkRainWidget()
+        MurkAirWidget()
+        MurkDaylightWidget()
+        MurkMoonWidget()
+    }
 }
 
 struct MurkWeatherWidget: Widget {
@@ -172,12 +204,11 @@ struct WidgetView: View {
                 default: SmallView(f: f, u: entry.unit, skin: entry.skin)
                 }
             } else {
-                VStack(spacing: 4) {
-                    Image(systemName: "icloud.slash")
-                    Text("Open Murk to load the forecast").font(.caption2).multilineTextAlignment(.center)
-                }
-                .foregroundStyle(p.muted)
+                EmptyWidget(reason: entry.reason)
             }
+        }
+        .overlay(alignment: .topTrailing) {
+            if isHome, let f = entry.forecast { FreshnessBadge(fetchedAt: f.fetchedAt, now: entry.date) }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(spoken))
@@ -188,6 +219,38 @@ struct WidgetView: View {
             if let sky { SkyBackground(sky: sky) } else { entry.skin.bg }
         }
         .widgetURL(URL(string: "murk://now"))
+    }
+}
+
+/// An empty widget says why, instead of sitting blank.
+struct EmptyWidget: View {
+    @Environment(\.widgetPalette) private var pal
+    let reason: String?
+    var body: some View {
+        VStack(spacing: 6) {
+            Image(systemName: "cloud.sun").font(.system(size: 22, weight: .semibold))
+            Text(reason ?? String(localized: "Open Murk to load the forecast"))
+                .font(.system(size: 12, weight: .semibold)).multilineTextAlignment(.center)
+        }
+        .foregroundStyle(pal?.muted ?? .secondary)
+        .padding(6)
+    }
+}
+
+/// "2H AGO" in the corner once the forecast is more than an hour old.
+struct FreshnessBadge: View {
+    @Environment(\.widgetPalette) private var pal
+    let fetchedAt: Date
+    let now: Date
+    var body: some View {
+        let age = now.timeIntervalSince(fetchedAt)
+        if age > 3600 {
+            let h = Int(age / 3600)
+            Text(h < 48 ? String(localized: "\(h)H AGO") : String(localized: "OLD"))
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundStyle(pal?.muted ?? .secondary)
+                .widgetAccentable()
+        }
     }
 }
 

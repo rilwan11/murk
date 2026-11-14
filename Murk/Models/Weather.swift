@@ -169,8 +169,33 @@ struct HourlyPoint: Identifiable {
     var apparent: Double?
     var windGust: Double?
     var uvIndex: Double?
+    var humidity: Double?           // %
+    var dewPoint: Double?           // °C
+    var pressure: Double?           // hPa at sea level
+    var cloudCover: Double?         // %
+    var snowfall: Double?           // cm in the hour
 
     var condition: Condition { Condition(code: code, isDay: isDay) }
+}
+
+/// Air quality from the provider: US AQI now and by hour, pollutants in µg/m³, pollen in grains/m³.
+struct AirQuality: Equatable {
+    struct Hour: Equatable { var time: Date; var aqi: Int }
+    var aqi: Int?
+    var pm25: Double?
+    var pm10: Double?
+    var ozone: Double?
+    var no2: Double?
+    var pollen: [String: Double] = [:]
+    var hourly: [Hour] = []
+
+    /// The pollutant furthest above its US 24-hour guideline, by name.
+    var mainPollutant: String? {
+        let ratios: [(String, Double)] = [("PM2.5", (pm25 ?? 0) / 35), ("PM10", (pm10 ?? 0) / 150),
+                                          ("Ozone", (ozone ?? 0) / 140), ("NO\u{2082}", (no2 ?? 0) / 190)]
+        guard let top = ratios.max(by: { $0.1 < $1.1 }), top.1 > 0 else { return nil }
+        return top.0
+    }
 }
 
 /// 15-minute precipitation, used for "rain starts in 12 min".
@@ -201,6 +226,7 @@ struct Forecast {
     var minutely: [MinutePoint] = []
     var alerts: [WeatherAlert] = []
     var aqi: Int?
+    var air: AirQuality? = nil
     var timeZone: TimeZone
     var fetchedAt: Date
     /// True when this came from the disk cache, not a fresh request.

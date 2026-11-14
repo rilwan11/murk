@@ -40,6 +40,10 @@ final class AppState: ObservableObject {
     // Navigation
     @Published var route: DeepLink?
     @Published var paywall: PaywallReason?
+    /// The hour the slider is on, shared by every page (index into `upcomingHours`; nil = now).
+    @Published var selectedHour: Int?
+    /// Days from today the Moon page's slider is on (0 = tonight).
+    @Published var moonDayOffset: Double = 0
 
     // Settings
     @Published var unit: TempUnit { didSet { defaults.set(unit.rawValue, forKey: "unit"); syncWidget() } }
@@ -302,7 +306,7 @@ final class AppState: ObservableObject {
         do {
             var fresh = try await repository.core(for: place)
             guard isCurrent(gen) else { return }
-            if let old = forecast, Self.same(old.place, place) { fresh.aqi = old.aqi; fresh.alerts = old.alerts }
+            if let old = forecast, Self.same(old.place, place) { fresh.aqi = old.aqi; fresh.air = old.air; fresh.alerts = old.alerts }
             forecast = fresh
             failure = nil
             isLoading = false
@@ -313,6 +317,7 @@ final class AppState: ObservableObject {
             let extras = await repository.extras(for: place)
             guard isCurrent(gen), var f = forecast, Self.same(f.place, place) else { return }
             if let a = extras.aqi { f.aqi = a }
+            if let q = extras.air { f.air = q }
             if extras.alertsLoaded { f.alerts = extras.alerts }
             forecast = f
             effects.notify(f, rules, unit, isPro)

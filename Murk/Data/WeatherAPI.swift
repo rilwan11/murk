@@ -64,7 +64,7 @@ enum WeatherAPI {
             .init(name: "latitude", value: Coordinate.string(place.latitude, places: places)),
             .init(name: "longitude", value: Coordinate.string(place.longitude, places: places)),
             .init(name: "current", value: "temperature_2m,apparent_temperature,weather_code,is_day,precipitation,wind_speed_10m,wind_gusts_10m,wind_direction_10m,relative_humidity_2m,surface_pressure,visibility,uv_index"),
-            .init(name: "hourly", value: "temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,is_day,wind_speed_10m,wind_gusts_10m,wind_direction_10m,uv_index"),
+            .init(name: "hourly", value: "temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,is_day,wind_speed_10m,wind_gusts_10m,wind_direction_10m,uv_index,relative_humidity_2m,dew_point_2m,pressure_msl,cloud_cover,snowfall"),
             .init(name: "daily", value: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,sunrise,sunset,uv_index_max,wind_speed_10m_max,wind_gusts_10m_max"),
             .init(name: "timezone", value: "auto"),
             .init(name: "forecast_days", value: "8"),
@@ -82,7 +82,10 @@ enum WeatherAPI {
         var items: [URLQueryItem] = [
             .init(name: "latitude", value: Coordinate.string(place.latitude, places: places)),
             .init(name: "longitude", value: Coordinate.string(place.longitude, places: places)),
-            .init(name: "current", value: "us_aqi"),
+            .init(name: "current", value: "us_aqi,pm2_5,pm10,ozone,nitrogen_dioxide,grass_pollen,birch_pollen,ragweed_pollen"),
+            .init(name: "hourly", value: "us_aqi"),
+            .init(name: "forecast_days", value: "2"),
+            .init(name: "timezone", value: "auto"),
         ]
         if let key = config.apiKey, !key.isEmpty { items.append(.init(name: "apikey", value: key)) }
         c.queryItems = items
@@ -143,7 +146,10 @@ enum WeatherAPI {
                                          code: hv(h.weather_code) ?? 0, isDay: (hv(h.is_day) ?? 1) == 1,
                                          windSpeed: hv(h.wind_speed_10m) ?? 0, windDirection: hv(h.wind_direction_10m) ?? 0,
                                          precip: hv(h.precipitation) ?? 0, apparent: hv(h.apparent_temperature),
-                                         windGust: hv(h.wind_gusts_10m), uvIndex: hv(h.uv_index)))
+                                         windGust: hv(h.wind_gusts_10m), uvIndex: hv(h.uv_index),
+                                         humidity: hv(h.relative_humidity_2m), dewPoint: hv(h.dew_point_2m),
+                                         pressure: hv(h.pressure_msl), cloudCover: hv(h.cloud_cover),
+                                         snowfall: hv(h.snowfall)))
             }
         }
 
@@ -179,6 +185,28 @@ enum WeatherAPI {
 
     static func parseAQI(_ data: Data) throws -> Int? {
         try JSONDecoder().decode(AQResponse.self, from: data).current?.us_aqi.map { Int($0.rounded()) }
+    }
+
+    /// The whole air-quality answer: AQI now and by hour, the main pollutants, and pollen where it exists (Europe).
+    static func parseAir(_ data: Data) throws -> AirQuality {
+        let r = try JSONDecoder().decode(AQResponse.self, from: data)
+        let tz = r.timezone.flatMap { TimeZone(identifier: $0) } ?? .current
+        let dt = DateFormatter(); dt.locale = Coordinate.posix; dt.calendar = Calendar(identifier: .gregorian)
+        dt.timeZone = tz; dt.dateFormat = "yyyy-MM-dd'T'HH:mm"
+        var hourly: [AirQuality.Hour] = []
+        if let h = r.hourly, let values = h.us_aqi {
+            for (i, ts) in h.time.enumerated() where i < values.count {
+                guard let t = dt.date(from: ts), let v = values[i] else { continue }
+                hourly.append(AirQuality.Hour(time: t, aqi: Int(v.rounded())))
+            }
+        }
+        let c = r.current
+        var pollen: [String: Double] = [:]
+        if let v = c?.grass_pollen { pollen["Grass"] = v }
+        if let v = c?.birch_pollen { pollen["Birch"] = v }
+        if let v = c?.ragweed_pollen { pollen["Ragweed"] = v }
+        return AirQuality(aqi: c?.us_aqi.map { Int($0.rounded()) }, pm25: c?.pm2_5, pm10: c?.pm10,
+                          ozone: c?.ozone, no2: c?.nitrogen_dioxide, pollen: pollen, hourly: hourly)
     }
 
     static func errorReason(_ data: Data) -> String? {
@@ -240,6 +268,11 @@ private struct OMHourly: Decodable {
     let wind_gusts_10m: [Double?]?
     let wind_direction_10m: [Double?]?
     let uv_index: [Double?]?
+    let relative_humidity_2m: [Double?]?
+    let dew_point_2m: [Double?]?
+    let pressure_msl: [Double?]?
+    let cloud_cover: [Double?]?
+    let snowfall: [Double?]?
 }
 
 private struct OMDaily: Decodable {
@@ -257,6 +290,18 @@ private struct OMDaily: Decodable {
 }
 
 private struct AQResponse: Decodable {
-    struct Cur: Decodable { let us_aqi: Double? }
+    struct Cur: Decodable {
+        let us_aqi: Double?
+        let pm2_5: Double?
+        let pm10: Double?
+        let ozone: Double?
+        let nitrogen_dioxide: Double?
+        let grass_pollen: Double?
+        let birch_pollen: Double?
+        let ragweed_pollen: Double?
+    }
+    struct Hourly: Decodable { let time: [String]; let us_aqi: [Double?]? }
     let current: Cur?
+    let hourly: Hourly?
+    let timezone: String?
 }

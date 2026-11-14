@@ -36,6 +36,30 @@ struct WidgetSnapshot: Codable, Equatable {
     var unit: String
     var skin: String
 
+    /// The next 24 hours and 3 hours of 15-minute rain, for the Rain, Air, Daylight and Moon widgets.
+    /// Optional, so snapshots written by older versions still read.
+    struct Hour: Codable, Equatable {
+        var time: Date
+        var temperature: Double
+        var precipChance: Int
+        var precip: Double
+        var code: Int
+        var isDay: Bool
+        var windSpeed: Double
+        var windDirection: Double
+        var windGust: Double?
+        var cloudCover: Double?
+        var snowfall: Double?
+    }
+    struct Quarter: Codable, Equatable { var time: Date; var precip: Double }
+    var hours: [Hour]? = nil
+    var quarters: [Quarter]? = nil
+    var windSpeed: Double? = nil
+    var windDirection: Double? = nil
+    var windGust: Double? = nil
+    var precipitation: Double? = nil
+    var aqi: Int? = nil
+
     init(forecast f: Forecast, unit: TempUnit, skin: Skin) {
         placeName = f.place.name
         isCurrentLocation = f.place.isCurrentLocation
@@ -51,6 +75,19 @@ struct WidgetSnapshot: Codable, Equatable {
         days = f.daily.prefix(8).map { Day(date: $0.date, high: $0.high, low: $0.low, code: $0.code, precipChance: $0.precipChance) }
         self.unit = unit.rawValue
         self.skin = skin.rawValue
+        func whole(_ d: Date) -> Date { Date(timeIntervalSince1970: d.timeIntervalSince1970.rounded()) }
+        let from = f.fetchedAt.addingTimeInterval(-3600)
+        hours = f.hourly.filter { $0.time >= from }.prefix(30).map {
+            Hour(time: whole($0.time), temperature: $0.temperature, precipChance: $0.precipChance, precip: $0.precip,
+                 code: $0.code, isDay: $0.isDay, windSpeed: $0.windSpeed, windDirection: $0.windDirection,
+                 windGust: $0.windGust, cloudCover: $0.cloudCover, snowfall: $0.snowfall)
+        }
+        quarters = f.minutely.filter { $0.time >= from }.prefix(14).map { Quarter(time: whole($0.time), precip: $0.precip) }
+        windSpeed = f.current.windSpeed
+        windDirection = f.current.windDirection
+        windGust = f.current.windGust
+        precipitation = f.current.precipitation
+        aqi = f.air?.aqi ?? f.aqi
     }
 
     var tempUnit: TempUnit { TempUnit(rawValue: unit) ?? .fahrenheit }
@@ -62,10 +99,18 @@ struct WidgetSnapshot: Codable, Equatable {
     /// A forecast the widget views can draw from.
     var forecast: Forecast {
         Forecast(place: Place(name: placeName, latitude: latitude, longitude: longitude, isCurrentLocation: isCurrentLocation),
-                 current: CurrentWeather(temperature: temperature, apparent: apparent, code: code, isDay: isDay),
+                 current: CurrentWeather(temperature: temperature, apparent: apparent, code: code, isDay: isDay,
+                                         windSpeed: windSpeed, windGust: windGust, windDirection: windDirection,
+                                         precipitation: precipitation),
                  daily: days.map { DailyWeather(date: $0.date, high: $0.high, low: $0.low, code: $0.code, precipChance: $0.precipChance,
                                                 precipSum: 0, sunrise: nil, sunset: nil, uvMax: nil, windMax: nil, gustMax: nil) },
-                 hourly: [], aqi: nil, timeZone: TimeZone(identifier: timeZoneID) ?? .current, fetchedAt: fetchedAt, isCached: true)
+                 hourly: (hours ?? []).map {
+                     HourlyPoint(time: $0.time, temperature: $0.temperature, precipChance: $0.precipChance, code: $0.code,
+                                 isDay: $0.isDay, windSpeed: $0.windSpeed, windDirection: $0.windDirection, precip: $0.precip,
+                                 windGust: $0.windGust, cloudCover: $0.cloudCover, snowfall: $0.snowfall)
+                 },
+                 minutely: (quarters ?? []).map { MinutePoint(time: $0.time, precip: $0.precip) },
+                 aqi: aqi, timeZone: TimeZone(identifier: timeZoneID) ?? .current, fetchedAt: fetchedAt, isCached: true)
     }
 
     // MARK: Storage

@@ -5,7 +5,11 @@ struct NowView: View {
     @EnvironmentObject var state: AppState
     @Binding var showSettings: Bool
     @State private var selectedDay = 0
-    @State private var hour: Int? = nil          // index into upcoming hours while scrubbing
+    /// The slider's hour, shared with the other pages.
+    private var hour: Int? {
+        get { state.selectedHour }
+        nonmutating set { state.selectedHour = newValue }
+    }
     @State private var regen = 0
     @State private var reset = 0
     @State private var showHint = true
@@ -36,7 +40,7 @@ struct NowView: View {
             titles(sky: sky)
 
             if !state.upcomingHours.isEmpty {
-                HourScrubber(hours: state.upcomingHours, selection: $hour)
+                HourScrubber(hours: state.upcomingHours, selection: $state.selectedHour)
                     .padding(.top, 10).padding(.horizontal, 22)
                     .noPageSwipe(page: 0)
             }
@@ -47,7 +51,7 @@ struct NowView: View {
 
             footer
         }
-        .padding(.bottom, 30)
+        .padding(.bottom, 62)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .foregroundStyle(ink)
         .environment(\.sky, sky)
@@ -58,7 +62,7 @@ struct NowView: View {
         .animation(.easeInOut(duration: 0.3), value: state.minimal)
         .onChange(of: state.forecast?.place.id) { _, _ in selectedDay = 0; hour = nil }
         .onChange(of: selectedDay) { _, d in if d > 0 { hour = nil } }
-        .onChange(of: hour) { _, h in if h != nil { selectedDay = 0 } }
+        .onChange(of: state.selectedHour) { _, h in if h != nil { selectedDay = 0 } }
         .onChange(of: soundKey) { _, _ in updateSound(config) }
         .onAppear { updateSound(config) }
         .sheet(isPresented: $showAlerts) {
@@ -388,8 +392,7 @@ struct NowView: View {
     /// The moon follows roughly the sun's path, running behind it by its age
     /// (a full moon rides highest at midnight, a new moon travels with the sun).
     static func moonAltitude(_ lat: Double, _ lon: Double, _ date: Date) -> Double {
-        let lag = Astronomy.moonAge(date) / Astronomy.synodicMonth * 86_400
-        return Astronomy.sunAltitude(latitude: lat, longitude: lon, at: date.addingTimeInterval(-lag))
+        Astronomy.moonAltitude(latitude: lat, longitude: lon, at: date)
     }
 
     private var soundKey: String {

@@ -22,6 +22,7 @@ enum WeatherError: LocalizedError, Equatable {
 /// The optional parts of a forecast. They never hold up the main screen.
 struct ForecastExtras: Equatable {
     var aqi: Int?
+    var air: AirQuality? = nil
     var alerts: [WeatherAlert] = []
     /// False when the alert lookup failed, so the caller keeps what it had instead of clearing it.
     var alertsLoaded = false
@@ -90,15 +91,16 @@ struct WeatherRepository: WeatherProviding {
 
     func extras(for place: Place) async -> ForecastExtras {
         let places = coordinatePlaces()
-        async let aqi: Int? = airQuality(for: place, places: places)
+        async let air: AirQuality? = airQuality(for: place, places: places)
         async let alerts: [WeatherAlert]? = try? await self.alerts(for: place)
         let a = await alerts
-        return ForecastExtras(aqi: await aqi, alerts: a ?? [], alertsLoaded: a != nil)
+        let q = await air
+        return ForecastExtras(aqi: q?.aqi, air: q, alerts: a ?? [], alertsLoaded: a != nil)
     }
 
-    private func airQuality(for place: Place, places: Int) async -> Int? {
+    private func airQuality(for place: Place, places: Int) async -> AirQuality? {
         guard let d = try? await get(WeatherAPI.airQualityURL(place, places: places, config: config), kind: "aqi", timeout: 8) else { return nil }
-        return try? WeatherAPI.parseAQI(d)
+        return try? WeatherAPI.parseAir(d)
     }
 
     /// Official alerts (US National Weather Service; empty elsewhere).

@@ -61,9 +61,9 @@ struct RootView: View {
                 .animation(.interactiveSpring(response: 0.35, dampingFraction: 0.86), value: page)
                 .simultaneousGesture(swipe(width: w))
 
-                PageDots(count: pageCount, page: $page)
-                    .environment(\.sky, page == 0 ? nil : state.forecast.flatMap { Sky.current($0, skin: skin) })
-                    .padding(.bottom, 4)
+                PageTabs(page: $page)
+                    .environment(\.sky, state.forecast.flatMap { Sky.current($0, skin: skin) })
+                    .padding(.bottom, 2)
             }
             .coordinateSpace(name: "root")
             .onPreferenceChange(StageFrameKey.self) { noSwipe = $0 }
@@ -125,40 +125,5 @@ struct RootView: View {
                     drag = 0
                 }
             }
-    }
-}
-
-struct PageDots: View {
-    static let names = [String(localized: "Now"), String(localized: "Air"), String(localized: "Rain"), String(localized: "Sun"), String(localized: "Moon")]
-    @EnvironmentObject var state: AppState
-    @Environment(\.sky) private var sky
-    let count: Int
-    @Binding var page: Int
-
-    var body: some View {
-        let p = Palette(skin: state.skin, sky: sky ?? (page == 0 ? state.forecast.flatMap { Sky.current($0, skin: state.skin) } : nil))
-        HStack(spacing: 6) {
-            ForEach(0..<count, id: \.self) { i in
-                Capsule()
-                    .fill(i == page ? p.ink : p.muted.opacity(0.6))
-                    .frame(width: i == page ? 16 : 6, height: 6)
-                    .padding(.vertical, 8)
-                    .contentShape(Rectangle())
-                    .onTapGesture { withAnimation { page = i } }
-            }
-        }
-        .accessibilityElement()
-        .accessibilityLabel(Text("Page"))
-        .accessibilityValue(Text(Self.names[min(page, Self.names.count - 1)]))
-        .accessibilityAdjustableAction { direction in
-            switch direction {
-            case .increment: page = min(page + 1, count - 1)
-            case .decrement: page = max(page - 1, 0)
-            @unknown default: break
-            }
-        }
-        .padding(.horizontal, 10)
-        .background(Capsule().fill(UIAccessibility.isReduceTransparencyEnabled ? AnyShapeStyle(p.glass) : AnyShapeStyle(.ultraThinMaterial)).opacity(page == 0 ? 0 : 1))
-        .animation(.easeInOut(duration: 0.25), value: page)
     }
 }
