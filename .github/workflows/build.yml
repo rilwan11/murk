@@ -62,6 +62,7 @@ jobs:
           xcodebuild build-for-testing -project Murk.xcodeproj -scheme Murk \
             -destination "id=$SIM" -configuration Debug -derivedDataPath DerivedData \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            OTHER_SWIFT_FLAGS='$(inherited) -Xfrontend -warn-long-expression-type-checking=120 -Xfrontend -warn-long-function-bodies=400' \
             2>&1 | tee build.log
 
       - name: Report compiler errors
@@ -74,6 +75,10 @@ jobs:
             m=$(echo "$line" | cut -d: -f5- | sed 's/^ *//')
             echo "::error file=$f,line=$l::$m"
           done
+          # Expressions that are slow to type-check can fail outright on other Xcode versions: list them.
+          echo "--- slow to type-check ---"
+          grep -E "warning: (expression|instance method|getter|global function|initializer|closure|static method).* took [0-9]+ms to type-check" build.log | sed "s|$GITHUB_WORKSPACE/||" | sort -u | sort -t' ' -k1,1 | head -60 || true
+          echo "--- end ---"
           grep -E "error:|BUILD (SUCCEEDED|FAILED)|TEST BUILD (SUCCEEDED|FAILED)" build.log | sort -u | tail -120 > errors.txt || true
           cat errors.txt
 
