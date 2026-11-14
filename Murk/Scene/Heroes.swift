@@ -347,7 +347,9 @@ final class SunHero: HeroScene {
             sunLight.position = Self.spot(altitude: max(s.altitude, 2), azimuth: s.azimuth, radius: 8)
             sunLight.look(at: SCNVector3Zero)
             sunLight.light?.color = color.blended(toward: .white, by: 0.55)
-            sunLight.light?.intensity = CGFloat(500 + min(1, max(0, s.altitude / 30)) * 900)
+            let strength: Double = min(1, max(0, s.altitude / 30))
+            let lux: Double = 500 + strength * 900
+            sunLight.light?.intensity = CGFloat(lux)
             amb.light?.intensity = 320
             amb.light?.color = UIColor(red: 0.78, green: 0.85, blue: 0.98, alpha: 1)
             grassMat.diffuse.contents = UIColor(hex: 0x6FAE5A)

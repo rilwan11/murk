@@ -570,16 +570,22 @@ struct CloudArt: View {
             ZStack {
                 orb.frame(width: w * 0.5, height: w * 0.5).position(x: w * 0.68, y: h * 0.3)
                 ForEach(0..<count, id: \.self) { i in
-                    let p = puffs[i]
-                    Circle()
-                        .fill(RadialGradient(colors: sunny ? [.white, Color(hex: 0xE4E9F0), Color(hex: 0x9FB0C8)]
-                                                           : [Color(hex: skin.cloudHex).opacity(1).mix(white: 0.28), Color(hex: skin.cloudHex), .black],
-                                             center: UnitPoint(x: 0.34, y: 0.26), startRadius: 0, endRadius: w * p.2 * 1.6))
-                        .frame(width: w * p.2 * 2, height: w * p.2 * 2)
-                        .position(x: w * p.0, y: h * p.1)
+                    puff(puffs[i], w: w, h: h)
                 }
             }
         }
+    }
+
+    private var puffColors: [Color] {
+        if sunny { return [.white, Color(hex: 0xE4E9F0), Color(hex: 0x9FB0C8)] }
+        let base = Color(hex: skin.cloudHex)
+        return [base.mix(white: 0.28), base, .black]
+    }
+
+    private func puff(_ p: (CGFloat, CGFloat, CGFloat), w: CGFloat, h: CGFloat) -> some View {
+        let size: CGFloat = w * p.2 * 2
+        let gradient = RadialGradient(colors: puffColors, center: UnitPoint(x: 0.34, y: 0.26), startRadius: 0, endRadius: w * p.2 * 1.6)
+        return Circle().fill(gradient).frame(width: size, height: size).position(x: w * p.0, y: h * p.1)
     }
 
     @ViewBuilder private var orb: some View {
