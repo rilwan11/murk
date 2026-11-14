@@ -107,6 +107,14 @@ struct Palette {
     let onInk: Color
     let bright: Bool
 
+    private init(ink: Color, muted: Color, line: Color, glass: Color, onInk: Color, bright: Bool) {
+        self.ink = ink; self.muted = muted; self.line = line; self.glass = glass; self.onInk = onInk; self.bright = bright
+    }
+
+    /// For text on the system's own glass (Clear and Tinted home screens): white, like Apple's widgets.
+    static let onGlass = Palette(ink: .white, muted: Color.white.opacity(0.72), line: Color.white.opacity(0.25),
+                                 glass: Color.white.opacity(0.14), onInk: Color(hex: 0x13233D), bright: false)
+
     init(skin: Skin, sky: Sky?) {
         // Reduce Transparency: cards become nearly solid.
         let solid = UIAccessibility.isReduceTransparencyEnabled

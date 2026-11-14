@@ -156,8 +156,10 @@ struct WidgetView: View {
             case .midnight: return Sky.at(altitude: -40, cover: 0, precip: false)   // always a clear night
             }
         }()
-        let sky = accented ? (live ?? Sky.at(altitude: -30, cover: 0, precip: false)).deepened() : live
-        let p = Palette(skin: entry.skin, sky: sky)
+        // Clear and Tinted home screens: iOS draws its own glass behind the widget, so Murk draws no sky
+        // there and uses white text, like Apple's widgets. Full color keeps the live sky.
+        let sky: Sky? = accented ? nil : live
+        let p: Palette = accented ? .onGlass : Palette(skin: entry.skin, sky: sky)
         Group {
             if let f = entry.forecast {
                 switch family {
@@ -179,12 +181,10 @@ struct WidgetView: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(spoken))
-        .background {
-            if accented, isHome, let sky { fullColorImage(sky.image()).padding(-60) }
-        }
         .environment(\.widgetPalette, p)
         .environment(\.widgetSky, sky)
         .containerBackground(for: .widget) {
+            // Shown only on a full-color home screen; Clear and Tinted replace it with glass.
             if let sky { SkyBackground(sky: sky) } else { entry.skin.bg }
         }
         .widgetURL(URL(string: "murk://now"))
@@ -327,25 +327,33 @@ struct RainRandom {
 struct HeroStack: View {
     @Environment(\.widgetPalette) private var pal
     let f: Forecast, u: TempUnit, skin: Skin
-    var skySize: CGFloat
-    var tempSize: CGFloat
-    var skyRatio: CGFloat = 0.62
     var showHiLo = false
 
+    /// The 3D sky across the top and the temperature in front of its lower edge, sized from the space
+    /// actually available, so the number is never hidden behind the clouds.
     var body: some View {
-        VStack(spacing: 0) {
-            VStack(spacing: -tempSize * 0.42) {
-                Sky3D(code: f.current.code, isDay: f.current.isDay, skin: skin)
-                    .frame(width: skySize, height: skySize * skyRatio)
-                    .clipped()
-                    .zIndex(1)
-                ExtrudedText(text: "\(u.temp(f.current.temperature))", size: tempSize, skin: skin)
-            }
-            if showHiLo, let d = f.daily.first {
-                Text("H \(u.temp(d.high))°  L \(u.temp(d.low))°")
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(pal?.muted ?? skin.muted)
-                    .widgetAccentable()
+        GeometryReader { g in
+            let hiLo: CGFloat = showHiLo ? 16 : 0
+            let h: CGFloat = max(40, g.size.height - hiLo)
+            let skyH: CGFloat = h * 0.74
+            let tempSize: CGFloat = h * 0.56
+            VStack(spacing: 0) {
+                ZStack(alignment: .bottom) {
+                    Sky3D(code: f.current.code, isDay: f.current.isDay, skin: skin)
+                        .frame(width: g.size.width, height: skyH)
+                        .clipped()
+                        .frame(maxHeight: .infinity, alignment: .top)
+                    ExtrudedText(text: "\(u.temp(f.current.temperature))", size: tempSize, skin: skin)
+                        .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
+                }
+                .frame(width: g.size.width, height: h)
+                if showHiLo, let d = f.daily.first {
+                    Text("H \(u.temp(d.high))°  L \(u.temp(d.low))°")
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(pal?.muted ?? skin.muted)
+                        .widgetAccentable()
+                        .frame(height: hiLo)
+                }
             }
         }
     }
@@ -364,8 +372,7 @@ struct SmallView: View {
             }
             .foregroundStyle(pal?.ink ?? skin.ink)
             .widgetAccentable()
-            HeroStack(f: f, u: u, skin: skin, skySize: 152, tempSize: showHiLo ? 72 : 86,
-                      skyRatio: showHiLo ? 0.56 : 0.62, showHiLo: showHiLo)
+            HeroStack(f: f, u: u, skin: skin, showHiLo: showHiLo)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
@@ -414,7 +421,7 @@ struct LargeView: View {
                 Text(f.place.name).font(.system(size: 16, weight: .heavy)).lineLimit(1)
             }
             .foregroundStyle(ink)
-            HeroStack(f: f, u: u, skin: skin, skySize: 280, tempSize: 118, skyRatio: 0.5)
+            HeroStack(f: f, u: u, skin: skin)
                 .frame(height: 165)
             Text(f.current.condition.title).font(.system(size: 18, weight: .black)).foregroundStyle(ink)
             Spacer(minLength: 0)

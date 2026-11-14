@@ -176,9 +176,33 @@ final class LocationManager: NSObject, CLLocationManagerDelegate, LocationProvid
             geocoder.reverseGeocodeLocation(location) { marks, _ in shot.resume(with: .success(marks?.first)) }
         }
         try Task.checkCancellation()
-        if let mark { name = mark.locality ?? mark.subAdministrativeArea ?? mark.name ?? name }
+        if let found = mark.flatMap({ $0.locality ?? $0.subAdministrativeArea ?? $0.name }) {
+            name = found
+            Self.rememberName(found, at: location)
+        } else if let known = Self.knownName(near: location) {
+            // The name lookup can fail or time out (weak signal, rate limits). The town you were in a
+            // moment ago is a far better label than "My Location".
+            name = known
+        }
         return Place(name: name, latitude: location.coordinate.latitude,
                      longitude: location.coordinate.longitude, isCurrentLocation: true)
+    }
+
+    /// The last place name the geocoder gave us, kept with rounded coordinates (about 1 km).
+    private static let nameKey = "location.lastName"
+
+    static func rememberName(_ name: String, at loc: CLLocation) {
+        let entry: [String: Any] = ["name": name,
+                                    "lat": Coordinate.rounded(loc.coordinate.latitude, places: 2),
+                                    "lon": Coordinate.rounded(loc.coordinate.longitude, places: 2)]
+        UserDefaults.standard.set(entry, forKey: nameKey)
+    }
+
+    /// The remembered name, if it was for somewhere within about 15 km.
+    static func knownName(near loc: CLLocation) -> String? {
+        guard let e = UserDefaults.standard.dictionary(forKey: nameKey), let name = e["name"] as? String,
+              let lat = e["lat"] as? Double, let lon = e["lon"] as? Double else { return nil }
+        return CLLocation(latitude: lat, longitude: lon).distance(from: loc) < 15_000 ? name : nil
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
