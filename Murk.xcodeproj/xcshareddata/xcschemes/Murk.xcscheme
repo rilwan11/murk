@@ -35,6 +35,20 @@
                ReferencedContainer = "container:Murk.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "1737229438084556C0D7E697"
+               BuildableName = "MurkWidgetTests.xctest"
+               BlueprintName = "MurkWidgetTests"
+               ReferencedContainer = "container:Murk.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction
@@ -61,6 +75,17 @@
                BlueprintIdentifier = "40E71E68DEB0D2C75699601B"
                BuildableName = "MurkTests.xctest"
                BlueprintName = "MurkTests"
+               ReferencedContainer = "container:Murk.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "1737229438084556C0D7E697"
+               BuildableName = "MurkWidgetTests.xctest"
+               BlueprintName = "MurkWidgetTests"
                ReferencedContainer = "container:Murk.xcodeproj">
             </BuildableReference>
          </TestableReference>

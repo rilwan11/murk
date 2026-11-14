@@ -43,6 +43,8 @@
 	<string>Murk uses your location to retrieve local weather, air quality, and weather alerts.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Murk saves weather wallpapers to your Photos.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
