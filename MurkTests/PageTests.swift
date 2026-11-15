@@ -202,3 +202,30 @@ final class RadarTests: XCTestCase {
         XCTAssertEqual(CommuteTimes.load(d), c)
     }
 }
+
+final class RolledForecastTests: XCTestCase {
+    func testOldForecastReadsAsTheHourItIsNow() {
+        let fetched = Date()
+        var f = Fixture.forecast(now: fetched)
+        f.current.isDay = true
+        f.current.code = 0
+        let later = fetched.addingTimeInterval(5 * 3600)
+        guard let hour = f.hourly.last(where: { $0.time <= later }) else { return XCTFail("no hourly data") }
+        let r = f.rolled(to: later)
+        XCTAssertEqual(r.current.temperature, hour.temperature)
+        XCTAssertEqual(r.current.isDay, hour.isDay)
+        XCTAssertEqual(r.current.code, hour.code)
+        XCTAssertEqual(r.fetchedAt, f.fetchedAt, "age stays honest")
+    }
+
+    func testFreshForecastIsUntouched() {
+        let f = Fixture.forecast()
+        XCTAssertEqual(f.rolled(to: Date().addingTimeInterval(600)).current.temperature, f.current.temperature)
+    }
+
+    func testPastDaysAreDropped() {
+        let f = Fixture.forecast()
+        let r = f.rolled(to: Date().addingTimeInterval(36 * 3600))
+        XCTAssertEqual(r.daily.count, f.daily.count - 1)
+    }
+}

@@ -237,6 +237,33 @@ struct Forecast {
     func isStale(now: Date = Date()) -> Bool { age(now: now) > 3600 }
 }
 
+extension Forecast {
+    /// The forecast as it reads at `date`: "now" comes from that hour of the forecast, and days already
+    /// over are dropped. Lets a widget showing an older forecast still say night at night.
+    /// `fetchedAt` is kept, so the age shown stays honest.
+    func rolled(to date: Date) -> Forecast {
+        guard date.timeIntervalSince(fetchedAt) > 30 * 60 else { return self }
+        var f = self
+        if let h = hourly.last(where: { $0.time <= date }), date.timeIntervalSince(h.time) < 3600 {
+            f.current.temperature = h.temperature
+            f.current.apparent = h.apparent
+            f.current.code = h.code
+            f.current.isDay = h.isDay
+            f.current.windSpeed = h.windSpeed
+            f.current.windDirection = h.windDirection
+            f.current.windGust = h.windGust
+            f.current.precipitation = h.precip
+            f.current.uvIndex = h.uvIndex
+        }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = timeZone
+        let today = cal.startOfDay(for: date)
+        let ahead = daily.filter { cal.startOfDay(for: $0.date) >= today }
+        if !ahead.isEmpty { f.daily = ahead }
+        return f
+    }
+}
+
 // MARK: - Helpers
 
 extension Double {

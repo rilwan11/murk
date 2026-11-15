@@ -14,9 +14,10 @@ struct FollowingProvider: TimelineProvider {
     func getTimeline(in context: Context, completion: @escaping (Timeline<WeatherEntry>) -> Void) {
         Task {
             let first = await WidgetLoader.load((nil, .sky))
-            let entries = (0..<4).map { i in
-                WeatherEntry(date: first.date.addingTimeInterval(Double(i) * 15 * 60), forecast: first.forecast,
-                             unit: first.unit, skin: first.skin, reason: first.reason)
+            let entries = (0..<4).map { i -> WeatherEntry in
+                let at = first.date.addingTimeInterval(Double(i) * 15 * 60)
+                return WeatherEntry(date: at, forecast: first.forecast?.rolled(to: at),
+                                    unit: first.unit, skin: first.skin, reason: first.reason)
             }
             completion(Timeline(entries: entries, policy: .after(Date().addingTimeInterval(30 * 60))))
         }

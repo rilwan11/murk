@@ -71,9 +71,10 @@ struct Provider: AppIntentTimelineProvider {
     func timeline(for configuration: MurkWidgetIntent, in context: Context) async -> Timeline<WeatherEntry> {
         let first = await load(configuration)
         // Same forecast, but the sky behind it keeps moving through the next hour.
-        let entries = (0..<4).map { i in
-            WeatherEntry(date: first.date.addingTimeInterval(Double(i) * 15 * 60), forecast: first.forecast,
-                         unit: first.unit, skin: first.skin, look: first.look, reason: first.reason)
+        let entries = (0..<4).map { i -> WeatherEntry in
+            let at = first.date.addingTimeInterval(Double(i) * 15 * 60)
+            return WeatherEntry(date: at, forecast: first.forecast?.rolled(to: at),
+                                unit: first.unit, skin: first.skin, look: first.look, reason: first.reason)
         }
         // Refresh every 30 minutes (iOS may stretch this to save battery).
         return Timeline(entries: entries, policy: .after(Date().addingTimeInterval(30 * 60)))
@@ -96,7 +97,8 @@ enum WidgetLoader {
         let place = choice.place?.place ?? SharedStore.place
         let saved = WidgetSnapshot.load(from: url)
         // The app keeps its own city fresh; a pinned city is refreshed here about once an hour.
-        let freshFor: TimeInterval = choice.place == nil ? WidgetSnapshot.freshFor : 3600
+        // Either way, after an hour the widget fetches for itself rather than show an old forecast.
+        let freshFor: TimeInterval = 3600
         if let s = saved, Date().timeIntervalSince(s.fetchedAt) < freshFor { return entry(s, choice.look) }
 
         var repo = WeatherRepository()
@@ -130,7 +132,8 @@ enum WidgetLoader {
 
     static func entry(_ s: WidgetSnapshot, _ look: WidgetLook) -> WeatherEntry {
         // Units and skin always follow the app's current settings.
-        WeatherEntry(date: .now, forecast: s.forecast, unit: SharedStore.unit, skin: SharedStore.skin, look: look)
+        let now = Date()
+        return WeatherEntry(date: now, forecast: s.forecast.rolled(to: now), unit: SharedStore.unit, skin: SharedStore.skin, look: look)
     }
 }
 
@@ -392,9 +395,12 @@ struct HeroStack: View {
             let tempSize: CGFloat = h * 0.56
             VStack(spacing: 0) {
                 ZStack(alignment: .bottom) {
+                    // The art is square: on a wide widget, don't stretch it to the full width, or its
+                    // sun and clouds get cut off top and bottom.
                     Sky3D(code: f.current.code, isDay: f.current.isDay, skin: skin)
-                        .frame(width: g.size.width, height: skyH)
+                        .frame(width: min(g.size.width, skyH * 1.35), height: skyH)
                         .clipped()
+                        .frame(width: g.size.width)
                         .frame(maxHeight: .infinity, alignment: .top)
                     ExtrudedText(text: "\(u.temp(f.current.temperature))", size: tempSize, skin: skin)
                         .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
