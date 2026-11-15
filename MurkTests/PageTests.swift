@@ -225,7 +225,11 @@ final class RolledForecastTests: XCTestCase {
 
     func testPastDaysAreDropped() {
         let f = Fixture.forecast()
-        let r = f.rolled(to: Date().addingTimeInterval(36 * 3600))
-        XCTAssertEqual(r.daily.count, f.daily.count - 1)
+        let later = Date().addingTimeInterval(36 * 3600)
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = f.timeZone
+        let today = cal.startOfDay(for: later)
+        let r = f.rolled(to: later)
+        XCTAssertLessThan(r.daily.count, f.daily.count)
+        XCTAssertEqual(r.daily.first.map { cal.startOfDay(for: $0.date) }, today)
     }
 }
