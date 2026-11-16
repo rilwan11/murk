@@ -21,6 +21,7 @@ struct RainView: View {
         PageScaffold(title: String(localized: "Rain"), page: 2, verdict: verdict) {
             Hero3DView(hero: hero, active: active, label: heroLabel)
                 .resettable { hero.resetCamera?(); day = nil }
+                .overlay(alignment: .bottomLeading) { legend }
                 .onAppear { hero.calm = reduceMotion; updateHero() }
                 .onChange(of: heroKey) { _, _ in updateHero() }
                 .onChange(of: reduceMotion) { _, v in hero.calm = v; updateHero() }
@@ -58,7 +59,6 @@ struct RainView: View {
         guard let f = state.forecast else { return }
         let d = day.flatMap { f.daily.indices.contains($0) ? f.daily[$0] : nil } ?? f.daily.first
         let total = d?.precipSum ?? 0
-        let level = min(1, total / 25)
         let h = state.selectedHourPoint
         let snow = (h?.snowfall ?? 0) > 0 || (h?.condition.precip ?? f.current.condition.precip) == .snow || d?.condition.precip == .snow
         let rate: Double = {
@@ -66,7 +66,25 @@ struct RainView: View {
             if day != nil { return (d?.precipChance ?? 0) >= 50 ? 0.4 : 0 }
             return f.current.condition.precip != .none ? max(0.25, f.current.condition.intensity) : 0
         }()
-        hero.configure(level: level, intensity: rate, snow: snow)
+        hero.configure(totalMM: total, metric: state.unit == .celsius, intensity: rate, snow: snow)
+    }
+
+    /// Says what the two parts of the scene mean.
+    private var legend: some View {
+        let p = Palette(skin: state.skin, sky: sky)
+        let dayName: String = {
+            guard let f = state.forecast, let i = day, f.daily.indices.contains(i) else { return String(localized: "today") }
+            return state.dayLabel(f.daily[i], index: i).lowercased()
+        }()
+        let when: String = state.selectedHourPoint.map { state.time($0.time) } ?? String(localized: "now")
+        return VStack(alignment: .leading, spacing: 3) {
+            Label { Text("GLASS · TOTAL \(dayName.uppercased())") } icon: { Image(systemName: "cylinder.fill") }
+            Label { Text("CLOUD · RAIN \(when.uppercased())") } icon: { Image(systemName: "cloud.fill") }
+        }
+        .font(.mono(9)).tracking(1)
+        .foregroundStyle(p.muted)
+        .padding(.leading, 18).padding(.bottom, 6)
+        .accessibilityHidden(true)
     }
 
     private var heroLabel: String {

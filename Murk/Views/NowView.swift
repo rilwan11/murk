@@ -35,8 +35,9 @@ struct NowView: View {
         VStack(spacing: 0) {
             header
             locationPrompt
-            headsUpPill(sky: sky)
+            // The pill floats over the top of the scene instead of pushing it down and cutting off its glow.
             stage(config: config)
+                .overlay(alignment: .top) { headsUpPill(sky: sky) }
             titles(sky: sky)
 
             if !state.upcomingHours.isEmpty {
@@ -118,6 +119,7 @@ struct NowView: View {
             .disabled(!isAlert)
             .accessibilityLabel(label)
             .accessibilityHint(isAlert ? Text("Shows the alert details") : Text(""))
+            .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
             .padding(.top, 8)
             .transition(.opacity)
         }

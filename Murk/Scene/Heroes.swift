@@ -145,8 +145,44 @@ final class RainHero: HeroScene {
     private let glint = SCNNode()
     private let liquidMat = HeroScene.pbr(UIColor(hex: 0x3EA0FF), rough: 0.15)
     private let cloudMat = SCNMaterial()
-    private var last: (Double, Double, Bool)?
+    private let scaleHalf = SCNNode()
+    private let scaleFull = SCNNode()
+    private let amount = SCNNode()
+    private var last: (Double, Double, Bool, Bool)?
     static let innerHeight: CGFloat = 2.2
+
+    /// The gauge's full height, picked so the expected amount fills a readable part of it.
+    static func fullScale(totalMM: Double, metric: Bool) -> Double {
+        let steps: [Double] = metric ? [5, 10, 25, 50, 100, 200] : [0.25, 0.5, 1, 2, 4, 8].map { $0 * 25.4 }
+        return steps.first { totalMM <= $0 * 0.92 } ?? steps.last!
+    }
+
+    static func amountText(_ mm: Double, metric: Bool) -> String {
+        if metric { return mm < 10 ? String(format: "%.1f mm", mm) : String(format: "%.0f mm", mm) }
+        let inch = mm / 25.4
+        return inch < 1 ? String(format: "%.2f in", inch) : String(format: "%.1f in", inch)
+    }
+
+    /// A crisp text badge on a plane, `height` scene units tall.
+    static func badge(_ text: String, height: CGFloat, fill: UIColor, ink: UIColor) -> SCNGeometry {
+        let font = UIFont.monospacedSystemFont(ofSize: 44, weight: .bold)
+        let size = (text as NSString).size(withAttributes: [.font: font])
+        let pad: CGFloat = 22
+        let w = size.width + pad * 2, h = size.height + pad
+        let img = UIGraphicsImageRenderer(size: CGSize(width: w, height: h)).image { _ in
+            fill.setFill()
+            UIBezierPath(roundedRect: CGRect(x: 0, y: 0, width: w, height: h), cornerRadius: h / 2).fill()
+            (text as NSString).draw(at: CGPoint(x: pad, y: pad / 2), withAttributes: [.font: font, .foregroundColor: ink])
+        }
+        let plane = SCNPlane(width: height * w / h, height: height)
+        let m = SCNMaterial()
+        m.lightingModel = .constant
+        m.diffuse.contents = img
+        m.isDoubleSided = true
+        m.writesToDepthBuffer = false
+        plane.materials = [m]
+        return plane
+    }
 
     init() {
         // Far enough back that the cloud over the gauge stays inside the frame.
@@ -165,30 +201,46 @@ final class RainHero: HeroScene {
         base.geometry?.materials = [Self.pbr(UIColor(hex: 0x2E3742), rough: 0.5, metal: 0.4)]
         base.position = SCNVector3(0, 0.09, 0); root.addChildNode(base)
 
-        let glassGeo = SCNTube(innerRadius: 0.68, outerRadius: 0.72, height: Self.innerHeight + 0.15)
+        // Clear glass: flat-tinted so it never turns into a white pillar under bright light,
+        // with bright rims top and bottom so the shape still reads.
+        let glassH = Self.innerHeight + 0.15
+        let glassGeo = SCNTube(innerRadius: 0.68, outerRadius: 0.72, height: glassH)
         let glass = SCNMaterial()
-        glass.lightingModel = .physicallyBased
-        glass.diffuse.contents = UIColor(white: 1, alpha: 0.12)
-        glass.roughness.contents = 0.04
-        glass.metalness.contents = 0.0
+        glass.lightingModel = .constant
+        glass.diffuse.contents = UIColor(red: 0.86, green: 0.93, blue: 1, alpha: 0.16)
         glass.transparencyMode = .dualLayer
         glass.blendMode = .alpha
         glass.isDoubleSided = true
-        glass.fresnelExponent = 2.2
-        glass.reflective.contents = UIColor(white: 1, alpha: 0.6)
+        glass.writesToDepthBuffer = false
         glassGeo.materials = [glass]
         let glassNode = SCNNode(geometry: glassGeo)
-        glassNode.position = SCNVector3(0, 0.18 + Float(Self.innerHeight + 0.15) / 2, 0)
+        glassNode.position = SCNVector3(0, 0.18 + Float(glassH) / 2, 0)
         glassNode.renderingOrder = 10
         root.addChildNode(glassNode)
+        let rimMat = SCNMaterial()
+        rimMat.lightingModel = .constant
+        rimMat.diffuse.contents = UIColor(white: 1, alpha: 0.75)
+        for y in [0.2, 0.18 + Float(glassH)] as [Float] {
+            let ring = SCNNode(geometry: SCNTorus(ringRadius: 0.7, pipeRadius: 0.018))
+            ring.geometry?.materials = [rimMat]
+            ring.position = SCNVector3(0, y, 0)
+            root.addChildNode(ring)
+        }
 
-        // Scale marks every fifth of the height.
+        // The scale: marks every quarter, with labels at half and full (set in configure).
         for i in 1...4 {
-            let mark = SCNNode(geometry: SCNBox(width: 0.22, height: 0.025, length: 0.02, chamferRadius: 0.01))
-            mark.geometry?.materials = [Self.pbr(UIColor(white: 1, alpha: 0.85), rough: 0.4)]
-            mark.position = SCNVector3(0.55, 0.2 + Float(Self.innerHeight) * Float(i) / 5, 0.45)
+            let mark = SCNNode(geometry: SCNBox(width: 0.26, height: 0.03, length: 0.02, chamferRadius: 0.01))
+            mark.geometry?.materials = [rimMat]
+            mark.position = SCNVector3(0.5, 0.18 + Float(Self.innerHeight) * Float(i) / 4, 0.5)
             mark.eulerAngles.y = -.pi / 4
             root.addChildNode(mark)
+        }
+        scaleHalf.position = SCNVector3(1.12, 0.18 + Float(Self.innerHeight) / 2, 0.5)
+        scaleFull.position = SCNVector3(1.12, 0.18 + Float(Self.innerHeight), 0.5)
+        for n in [scaleHalf, scaleFull, amount] {
+            n.constraints = [SCNBillboardConstraint()]
+            n.renderingOrder = 20
+            root.addChildNode(n)
         }
 
         // Liquid: a cylinder that grows from the bottom, with a brighter surface disc on top.
@@ -224,22 +276,30 @@ final class RainHero: HeroScene {
         glint.light = Self.light(.omni, 0, color: UIColor(red: 1, green: 0.95, blue: 0.8, alpha: 1))
         glint.position = SCNVector3(1.2, 2.2, 1.6)
         root.addChildNode(glint)
-        configure(level: 0, intensity: 0, snow: false)
+        configure(totalMM: 0, metric: true, intensity: 0, snow: false)
     }
 
-    /// level: 0…1 of the gauge; intensity: 0…1 of the falling rain or snow.
-    func configure(level: Double, intensity: Double, snow: Bool) {
-        let key = ((level * 50).rounded(), (intensity * 10).rounded(), snow)
+    /// totalMM: what the glass holds (the day's expected total); intensity: 0…1 of the cloud's rain or snow now.
+    func configure(totalMM: Double, metric: Bool, intensity: Double, snow: Bool) {
+        let key = ((totalMM * 10).rounded(), (intensity * 10).rounded(), snow, metric)
         if let l = last, l == key { return }
         let first = last == nil
         last = key
-        let h = max(0.01, CGFloat(min(1, max(0, level))) * Self.innerHeight)
+        let full = Self.fullScale(totalMM: totalMM, metric: metric)
+        let level = min(1, max(0, totalMM / full))
+        let label = UIColor(white: 0.08, alpha: 0.55)
+        scaleHalf.geometry = Self.badge(Self.amountText(full / 2, metric: metric), height: 0.22, fill: label, ink: .white)
+        scaleFull.geometry = Self.badge(Self.amountText(full, metric: metric), height: 0.22, fill: label, ink: .white)
+        amount.geometry = Self.badge(totalMM < 0.05 ? String(localized: "dry") : Self.amountText(totalMM, metric: metric),
+                                     height: 0.34, fill: UIColor(hex: 0x1F6FD6), ink: .white)
+        let h = max(0.01, CGFloat(level) * Self.innerHeight)
         SCNTransaction.begin(); SCNTransaction.animationDuration = first ? 0 : 0.9
         SCNTransaction.animationTimingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         (liquid.geometry as? SCNCylinder)?.height = h
         liquid.position = SCNVector3(0, 0.18 + Float(h) / 2, 0)
         surface.position = SCNVector3(0, 0.18 + Float(h), 0)
         surface.opacity = level > 0.005 ? 1 : 0
+        amount.position = SCNVector3(-1.25, 0.18 + Float(max(h, 0.2)), 0.5)
         liquidMat.diffuse.contents = snow ? UIColor(white: 0.97, alpha: 1) : UIColor(hex: 0x3EA0FF)
         liquidMat.emission.contents = snow ? UIColor(white: 0.25, alpha: 1) : UIColor(hex: 0x0C3A7A)
         liquidMat.roughness.contents = snow ? 0.9 : 0.15

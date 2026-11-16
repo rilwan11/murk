@@ -105,16 +105,12 @@ struct RadarMap: UIViewRepresentable {
         map.showsCompass = false
         // Radar tiles are coarse: keep the view regional.
         map.cameraZoomRange = MKMapView.CameraZoomRange(minCenterCoordinateDistance: 60_000, maxCenterCoordinateDistance: 4_000_000)
-        let center = CLLocationCoordinate2D(latitude: place.latitude, longitude: place.longitude)
-        map.setRegion(MKCoordinateRegion(center: center, latitudinalMeters: 260_000, longitudinalMeters: 260_000), animated: false)
-        let pin = MKPointAnnotation()
-        pin.coordinate = center
-        pin.title = place.name
-        map.addAnnotation(pin)
+        context.coordinator.center(on: place, map: map)
         return map
     }
 
     func updateUIView(_ map: MKMapView, context: Context) {
+        context.coordinator.center(on: place, map: map)
         context.coordinator.show(catalog, index: index, on: map)
     }
 
@@ -123,6 +119,20 @@ struct RadarMap: UIViewRepresentable {
         private var overlays: [RadarTileOverlay] = []
         private var renderers: [String: MKTileOverlayRenderer] = [:]
         private var current = -1
+        private var placeID: String?
+        private let pin = MKPointAnnotation()
+
+        /// Follows the place the app is showing, not just the one the map first opened on.
+        func center(on place: Place, map: MKMapView) {
+            guard place.id != placeID || pin.coordinate.latitude != place.latitude else { return }
+            let first = placeID == nil
+            placeID = place.id
+            let c = CLLocationCoordinate2D(latitude: place.latitude, longitude: place.longitude)
+            pin.coordinate = c
+            pin.title = place.name
+            if map.annotations.isEmpty { map.addAnnotation(pin) }
+            map.setRegion(MKCoordinateRegion(center: c, latitudinalMeters: 260_000, longitudinalMeters: 260_000), animated: !first)
+        }
 
         func show(_ c: RadarService.Catalog, index: Int, on map: MKMapView) {
             if c != catalog {
