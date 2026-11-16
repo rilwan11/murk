@@ -18,6 +18,7 @@ struct SunView: View {
         let f = state.forecast
         PageScaffold(title: String(localized: "Sun"), page: 3, verdict: f.map { Verdicts.sun($0, now: now) }) {
             Hero3DView(hero: hero, active: active, label: heroLabel(now))
+                .resettable { hero.resetCamera?() }
                 .onChange(of: state.selectedHour) { _, _ in updateHero(now) }
                 .onChange(of: state.forecast?.place.id) { _, _ in updateHero(now); year = [] }
                 // Once a minute, keyed by the minute: an onChange on the timeline's date can fire twice in one frame.

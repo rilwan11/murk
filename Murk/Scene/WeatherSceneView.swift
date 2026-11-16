@@ -42,9 +42,9 @@ struct WeatherSceneView: UIViewRepresentable {
         v.scene = scene.scene
         v.pointOfView = scene.cameraNode
         v.backgroundColor = .clear
-        v.antialiasingMode = .multisampling4X
+        v.antialiasingMode = .multisampling2X
         v.rendersContinuously = false
-        v.preferredFramesPerSecond = 30
+        v.preferredFramesPerSecond = 60
         v.allowsCameraControl = true
         v.defaultCameraController.interactionMode = .orbitArcball   // no up/down limit
         v.defaultCameraController.inertiaEnabled = true
@@ -65,6 +65,10 @@ struct WeatherSceneView: UIViewRepresentable {
         return v
     }
 
+    static func dismantleUIView(_ v: SCNView, coordinator: WeatherScene) {
+        MotionTilt.shared.remove(coordinator)
+    }
+
     func updateUIView(_ v: SCNView, context: Context) {
         context.coordinator.onThunder = onThunder
         context.coordinator.onTap = onTap
@@ -82,6 +86,7 @@ final class WeatherScene: NSObject, UIGestureRecognizerDelegate {
 
     /// Stops or resumes drawing. A paused scene uses no GPU.
     func setActive(_ on: Bool) {
+        MotionTilt.shared.follow(root, owner: self, on: on && !calm)
         guard on != isActive || view?.isPlaying != on else { return }
         isActive = on
         scene.isPaused = !on
@@ -89,10 +94,9 @@ final class WeatherScene: NSObject, UIGestureRecognizerDelegate {
         if on { applyFrameRate() }
     }
 
-    /// 30 fps for drifting clouds; 60 for rain, snow and storms, or while being spun.
+    /// 60 fps normally (30 looked choppy); the display's full rate (120 Hz on ProMotion) while being spun.
     private func applyFrameRate(interacting: Bool = false) {
-        let busy = (last?.precip ?? .none) != .none || last?.thunder == true
-        view?.preferredFramesPerSecond = (interacting || busy) && !calm ? 60 : 30
+        view?.preferredFramesPerSecond = calm ? 30 : (interacting ? 0 : 60)
     }
 
     @objc func touched(_ g: UIGestureRecognizer) {

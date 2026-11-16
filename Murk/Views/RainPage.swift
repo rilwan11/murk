@@ -20,6 +20,7 @@ struct RainView: View {
         }
         PageScaffold(title: String(localized: "Rain"), page: 2, verdict: verdict) {
             Hero3DView(hero: hero, active: active, label: heroLabel)
+                .resettable { hero.resetCamera?(); day = nil }
                 .onAppear { hero.calm = reduceMotion; updateHero() }
                 .onChange(of: heroKey) { _, _ in updateHero() }
                 .onChange(of: reduceMotion) { _, v in hero.calm = v; updateHero() }

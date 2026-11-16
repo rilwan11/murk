@@ -184,3 +184,39 @@ extension AppState {
     /// The moment the pages are showing.
     var selectedMoment: Date { selectedHourPoint?.time ?? Date() }
 }
+
+/// The round reset button in the corner of every page's 3D scene: puts the view back to how it
+/// started and the slider back to now.
+struct ResetButton: View {
+    @EnvironmentObject var state: AppState
+    @Environment(\.sky) private var sky
+    var action: () -> Void
+
+    var body: some View {
+        let p = Palette(skin: state.skin, sky: sky)
+        Button {
+            action()
+            withAnimation(.easeInOut(duration: 0.3)) {
+                state.selectedHour = nil
+                state.moonDayOffset = 0
+            }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        } label: {
+            Image(systemName: "arrow.counterclockwise")
+                .font(.system(size: 15, weight: .semibold))
+                .frame(width: 36, height: 36)
+                .background(Circle().stroke(p.line))
+                .contentShape(Circle())
+        }
+        .foregroundStyle(p.ink)
+        .accessibilityLabel(Text("Reset the view"))
+        .accessibilityHint(Text("Puts the scene and the time back to now"))
+    }
+}
+
+extension View {
+    /// Adds the reset button to the bottom corner of a page's 3D scene.
+    func resettable(_ action: @escaping () -> Void) -> some View {
+        overlay(alignment: .bottomTrailing) { ResetButton(action: action).padding(.trailing, 16).padding(.bottom, 4) }
+    }
+}

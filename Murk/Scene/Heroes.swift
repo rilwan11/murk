@@ -6,6 +6,10 @@ import UIKit
 class HeroScene: ObservableObject {
     let scene = SCNScene()
     let cameraNode = SCNNode()
+    /// Everything in the world hangs from here, so tilting the phone can tilt it all at once.
+    let stage = SCNNode()
+    /// Set by the view: puts the camera back where it started.
+    var resetCamera: (() -> Void)?
     let target: SCNVector3
     let home: SCNVector3
     /// True while something moves on its own (particles, swaying), so the view keeps drawing.
@@ -24,6 +28,7 @@ class HeroScene: ObservableObject {
         cameraNode.position = home
         cameraNode.look(at: target)
         scene.rootNode.addChildNode(cameraNode)
+        scene.rootNode.addChildNode(stage)
     }
 
     func calmChanged() {}
@@ -87,8 +92,9 @@ struct Hero3DView: UIViewRepresentable {
         v.scene = hero.scene
         v.pointOfView = hero.cameraNode
         v.backgroundColor = .clear
-        v.antialiasingMode = .multisampling4X
-        v.preferredFramesPerSecond = 30
+        v.antialiasingMode = .multisampling2X
+        // Full display rate: 30 fps looked choppy, above all on 120 Hz screens.
+        v.preferredFramesPerSecond = 0
         v.allowsCameraControl = true
         v.defaultCameraController.interactionMode = .orbitTurntable
         v.defaultCameraController.inertiaEnabled = true
@@ -101,22 +107,31 @@ struct Hero3DView: UIViewRepresentable {
         v.isAccessibilityElement = true
         context.coordinator.hero = hero
         context.coordinator.view = v
-        apply(v)
+        hero.resetCamera = { [weak c = context.coordinator] in c?.reset() }
+        apply(v, context.coordinator)
         return v
     }
 
     func updateUIView(_ v: SCNView, context: Context) {
         context.coordinator.hero = hero
-        apply(v)
+        hero.resetCamera = { [weak c = context.coordinator] in c?.reset() }
+        apply(v, context.coordinator)
     }
 
-    private func apply(_ v: SCNView) {
+    static func dismantleUIView(_ v: SCNView, coordinator: Coordinator) {
+        MotionTilt.shared.remove(coordinator)
+    }
+
+    private func apply(_ v: SCNView, _ c: Coordinator) {
         v.accessibilityLabel = label
         v.accessibilityHint = String(localized: "A 3D scene. Drag to turn it, double tap to reset.")
         v.accessibilityTraits = .image
         v.scene?.isPaused = !active
-        v.isPlaying = active && hero.animating
+        // While tilting, keep drawing so the motion is smooth.
+        let tilting = active && !hero.calm && MotionTilt.enabled
+        v.isPlaying = active && (hero.animating || tilting)
         v.rendersContinuously = false
+        MotionTilt.shared.follow(hero.stage, owner: c, on: tilting)
     }
 }
 
@@ -136,7 +151,7 @@ final class RainHero: HeroScene {
     init() {
         // Far enough back that the cloud over the gauge stays inside the frame.
         super.init(home: SCNVector3(0, 2.0, 10.8), target: SCNVector3(0, 1.75, 0))
-        let root = scene.rootNode
+        let root = stage
 
         let key = SCNNode(); key.light = Self.light(.directional, 1100)
         key.light?.castsShadow = true; key.light?.shadowRadius = 4; key.light?.shadowColor = UIColor(white: 0, alpha: 0.35)
@@ -275,7 +290,7 @@ final class SunHero: HeroScene {
 
     init() {
         super.init(home: SCNVector3(0, 3.0, 9.5), target: SCNVector3(0, 0.6, 0))
-        let root = scene.rootNode
+        let root = stage
 
         // Island: a grassy disc over a rocky cone.
         let top = SCNNode(geometry: SCNCylinder(radius: 2.1, height: 0.22))
@@ -398,7 +413,7 @@ final class AirHero: HeroScene {
 
     init() {
         super.init(home: SCNVector3(0, 3.2, 8.6), target: SCNVector3(0, 1.0, 0))
-        let root = scene.rootNode
+        let root = stage
         let key = SCNNode(); key.light = Self.light(.directional, 1150)
         key.light?.castsShadow = true; key.light?.shadowRadius = 3; key.light?.shadowColor = UIColor(white: 0, alpha: 0.35)
         key.position = SCNVector3(-4, 8, 4); key.look(at: SCNVector3Zero); root.addChildNode(key)

@@ -4,6 +4,8 @@ struct MoonView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.sky) private var sky
     @Environment(\.pageActive) private var active
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var resetToken = 0
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 300)) { tl in
@@ -37,13 +39,15 @@ struct MoonView: View {
                 Circle().fill(RadialGradient(colors: [state.skin.moon.opacity(0.08 + 0.25 * k), .clear], center: .center, startRadius: 80, endRadius: 170))
                     .opacity(sky?.bright == true ? 0 : 1)
                 MoonOrbView(age: age, tint: state.skin.moonHex,
-                            daySky: sky.flatMap { $0.bright ? Sky.lerp($0.top, $0.mid, 0.45) : nil })
+                            daySky: sky.flatMap { $0.bright ? Sky.lerp($0.top, $0.mid, 0.45) : nil },
+                            active: active, calm: reduceMotion, resetToken: resetToken)
                     .aspectRatio(1, contentMode: .fit)
                     .padding(12)
             }
             .accessibilityElement(children: .ignore)
             .accessibilityAddTraits(.isImage)
             .accessibilityLabel(Text("The moon, \(Int((k * 100).rounded())) percent lit, \(Astronomy.phaseName(age: age))"))
+            .resettable { resetToken += 1 }
         } extra: {
             MoonDaySlider(offset: $state.moonDayOffset, now: now)
                 .padding(.horizontal, 22)

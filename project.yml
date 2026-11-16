@@ -39,6 +39,7 @@ targets:
               - murk
         UILaunchScreen: {}
         NSSupportsLiveActivities: true
+        CADisableMinimumFrameDurationOnPhone: true
         UIUserInterfaceStyle: Dark
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

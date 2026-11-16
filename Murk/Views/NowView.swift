@@ -142,7 +142,11 @@ struct NowView: View {
     }
 
     private var resetButton: some View {
-        Button { reset += 1; UIImpactFeedbackGenerator(style: .light).impactOccurred() } label: {
+        Button {
+            reset += 1
+            withAnimation(.easeInOut(duration: 0.3)) { hour = nil; selectedDay = 0 }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        } label: {
             Image(systemName: "arrow.counterclockwise")
                 .font(.system(size: 15, weight: .semibold))
                 .frame(width: 36, height: 36)
@@ -184,12 +188,15 @@ struct NowView: View {
             .font(.display(36)).tracking(-1)
             .minimumScaleFactor(0.6).lineLimit(1)
             .padding(.top, 6).padding(.horizontal, 20)
-        if let feels = feelsLike {
-            Text("FEELS LIKE \(feels)°").font(.mono(10)).tracking(1.5).foregroundStyle(onSky ? ink : muted)
-                .padding(.horizontal, onSky ? 12 : 0).padding(.vertical, onSky ? 5 : 0)
-                .background { if let sky { Capsule().fill(sky.glass) } }
-                .padding(.top, 2)
+        HStack(spacing: 8) {
+            if state.bothUnits, let c = shownCelsius { otherUnitChip(c, sky: sky) }
+            if let feels = feelsLike {
+                Text("FEELS LIKE \(feels)°").font(.mono(10)).tracking(1.5).foregroundStyle(onSky ? ink : muted)
+                    .padding(.horizontal, onSky ? 12 : 0).padding(.vertical, onSky ? 5 : 0)
+                    .background { if let sky { Capsule().fill(sky.glass) } }
+            }
         }
+        .padding(.top, 2)
         if let next = comingUp {
             Label(next, systemImage: "arrow.turn.down.right").font(.mono(10)).tracking(1.2)
                 .foregroundStyle(muted).lineLimit(1).minimumScaleFactor(0.7)
@@ -340,6 +347,32 @@ struct NowView: View {
         if let h = hourPoint { return h.condition.title }
         if selectedDay > 0, selectedDay < f.daily.count { return f.daily[selectedDay].condition.title }
         return f.current.condition.title
+    }
+
+    /// The temperature the big digits show, in °C (the forecast's own unit).
+    private var shownCelsius: Double? {
+        guard let f = state.forecast else { return nil }
+        if selectedDay > 0, f.daily.indices.contains(selectedDay) { return f.daily[selectedDay].high }
+        return hourPoint?.temperature ?? f.current.temperature
+    }
+
+    /// The same temperature in the other unit, as a small outlined chip. Tap it to make that unit the main one.
+    private func otherUnitChip(_ celsius: Double, sky: Sky?) -> some View {
+        let other: TempUnit = state.unit == .fahrenheit ? .celsius : .fahrenheit
+        return Button {
+            withAnimation(.easeInOut(duration: 0.25)) { state.unit = other }
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        } label: {
+            Text("\(other.temp(celsius))\(other.symbol)")
+                .font(.mono(11, .bold)).tracking(1)
+                .padding(.horizontal, 10).padding(.vertical, 4)
+                .overlay(Capsule().stroke(ink.opacity(0.55), lineWidth: 1))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(ink)
+        .accessibilityLabel(Text("\(other.temp(celsius)) degrees \(other == .celsius ? "Celsius" : "Fahrenheit")"))
+        .accessibilityHint(Text("Switches the main unit"))
     }
 
     private var feelsLike: Int? {

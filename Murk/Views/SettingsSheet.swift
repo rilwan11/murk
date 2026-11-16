@@ -208,7 +208,11 @@ struct SettingsSheet: View {
                 ForEach(TempUnit.allCases) { Text($0.symbol).tag($0) }
             } label: { Label("Units", systemImage: "thermometer.medium") }
             .pickerStyle(.segmented)
+            Toggle(isOn: $state.bothUnits) {
+                Label("Also show \(state.unit == .fahrenheit ? "°C" : "°F") on Now", systemImage: "thermometer.variable")
+            }
             Toggle(isOn: $state.minimal) { Label("Minimal mode", systemImage: "eye.slash") }
+            Toggle(isOn: $state.tilt) { Label("Tilt scenes with the phone", systemImage: "gyroscope") }
             Toggle(isOn: $state.alerts) { Label("Heads-up pill", systemImage: "exclamationmark.triangle") }
             Toggle(isOn: $state.sound) { Label("Weather sounds", systemImage: "speaker.wave.2") }
             Toggle(isOn: $state.approximateLocation) { Label("Approximate location", systemImage: "scope") }

@@ -51,6 +51,10 @@ final class AppState: ObservableObject {
     @Published var unit: TempUnit { didSet { defaults.set(unit.rawValue, forKey: "unit"); syncWidget() } }
     @Published var skin: Skin { didSet { defaults.set(skin.rawValue, forKey: "skin"); syncWidget() } }
     @Published var minimal: Bool { didSet { defaults.set(minimal, forKey: "minimal") } }
+    /// The Now page also shows the temperature in the other unit.
+    @Published var bothUnits: Bool { didSet { defaults.set(bothUnits, forKey: "bothUnits") } }
+    /// Tilting the phone tilts the 3D scenes.
+    @Published var tilt: Bool { didSet { defaults.set(tilt, forKey: MotionTilt.settingKey) } }
     /// The heads-up pill above the scene.
     @Published var alerts: Bool { didSet { defaults.set(alerts, forKey: "alerts") } }
     @Published var autoSkin: Bool { didSet { defaults.set(autoSkin, forKey: "autoSkin"); if autoSkin { resolveAutoSkin() } } }
@@ -90,6 +94,8 @@ final class AppState: ObservableObject {
         unit = TempUnit(rawValue: defaults.string(forKey: "unit") ?? "") ?? (Locale.current.measurementSystem == .us ? .fahrenheit : .celsius)
         skin = Skin(rawValue: defaults.string(forKey: "skin") ?? "") ?? .graphite
         minimal = defaults.bool(forKey: "minimal")
+        bothUnits = defaults.bool(forKey: "bothUnits")
+        tilt = defaults.object(forKey: MotionTilt.settingKey) as? Bool ?? true
         alerts = defaults.object(forKey: "alerts") as? Bool ?? true
         autoSkin = defaults.bool(forKey: "autoSkin")
         sound = defaults.object(forKey: "sound") as? Bool ?? true

@@ -14,6 +14,7 @@ struct AirView: View {
         PageScaffold(title: String(localized: "Air"), page: 1,
                      verdict: f.map { Verdicts.wind($0, at: h, now: state.selectedMoment, unit: state.unit) }) {
             Hero3DView(hero: hero, active: active, label: heroLabel)
+                .resettable { hero.resetCamera?() }
                 .onAppear { hero.calm = reduceMotion; updateHero() }
                 .onChange(of: heroKey) { _, _ in updateHero() }
                 .onChange(of: reduceMotion) { _, v in hero.calm = v; updateHero() }
