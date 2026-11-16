@@ -95,7 +95,7 @@ final class AppState: ObservableObject {
         skin = Skin(rawValue: defaults.string(forKey: "skin") ?? "") ?? .graphite
         minimal = defaults.bool(forKey: "minimal")
         bothUnits = defaults.bool(forKey: "bothUnits")
-        SharedStore.bothUnits = bothUnits
+        SharedStore.bothUnits = defaults.bool(forKey: "bothUnits")
         tilt = defaults.object(forKey: MotionTilt.settingKey) as? Bool ?? true
         alerts = defaults.object(forKey: "alerts") as? Bool ?? true
         autoSkin = defaults.bool(forKey: "autoSkin")
