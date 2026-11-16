@@ -112,6 +112,10 @@ final class WidgetChoiceTests: XCTestCase {
         XCTAssertEqual(c.look, .sky)
     }
 
+    func testLightOrDarkIsFree() {
+        XCTAssertEqual(WidgetChoice.resolve(placeID: nil, look: .system, isPro: false, places: places).look, .system)
+    }
+
     func testProWidgetsUseTheChosenCityAndStyle() {
         let c = WidgetChoice.resolve(placeID: Fixture.ny.id, look: .midnight, isPro: true, places: places)
         XCTAssertEqual(c.place?.name, "New York")
@@ -126,7 +130,7 @@ final class WidgetChoiceTests: XCTestCase {
     }
 
     func testOnlyTheLiveSkyIsFree() {
-        XCTAssertEqual(WidgetLook.allCases.filter { !$0.isPremium }, [.sky])
+        XCTAssertEqual(WidgetLook.allCases.filter { !$0.isPremium }, [.sky, .system])
     }
 
     func testSharedPlacesAreRoundedAndPerCityFilesRevealNothing() {

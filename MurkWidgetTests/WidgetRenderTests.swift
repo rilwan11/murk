@@ -55,6 +55,19 @@ final class WidgetRenderTests: XCTestCase {
         XCTAssertFalse(f.hourly.isEmpty)
     }
 
+    func testLightOrDarkStyleDrawsInBothAppearances() {
+        var e = entry(forecast())
+        e.look = .system
+        assertDrawn(WidgetView(entry: e).environment(\.colorScheme, .light), "Light widget")
+        assertDrawn(WidgetView(entry: e).environment(\.colorScheme, .dark), "Dark widget")
+    }
+
+    func testOtherUnitText() {
+        XCTAssertEqual(OtherUnit.text(20, .fahrenheit, on: true), "20°C")
+        XCTAssertEqual(OtherUnit.text(20, .celsius, on: true), "68°F")
+        XCTAssertNil(OtherUnit.text(20, .celsius, on: false))
+    }
+
     func testEmptyWidgetStillSaysSomething() {
         assertDrawn(WidgetView(entry: entry(nil)), "Empty widget")
     }

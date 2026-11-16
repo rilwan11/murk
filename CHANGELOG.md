@@ -6,6 +6,8 @@
 - **Reset on every page:** the round arrow in the corner of each 3D scene puts the view back and the slider back to now.
 - **Tilt:** tilting the phone tilts the 3D scenes a little. Settings › Tilt scenes with the phone. Off with Reduce Motion.
 - **Both units:** Settings › Also show °C (or °F) adds the other unit as a small chip on the Now page; tap it to switch.
+- **Widgets show both units too** when that setting is on (under the big number, and on the Lock Screen widgets).
+- **New widget style, "Light or dark, like the phone"** (free): a pale card in Light mode, near-black in Dark mode.
 - **Smoother 3D:** scenes now draw at 60 fps (up to 120 Hz while you spin them) instead of 30.
 - **Rain countdown on the Lock Screen and in the Dynamic Island** (Murk Pro): when rain is due to start or stop within the hour, a live timer and the next two hours as bars. Settings › Notify me about › Rain countdown.
 - **Radar map** on the Rain page: the past two hours, looping. Tap it for a full-screen map with a time scrubber.

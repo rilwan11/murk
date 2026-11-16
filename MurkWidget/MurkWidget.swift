@@ -37,10 +37,11 @@ struct PlaceQuery: EntityQuery {
 }
 
 enum WidgetStyleOption: String, AppEnum {
-    case sky, skin, midnight
+    case sky, system, skin, midnight
     static var typeDisplayRepresentation: TypeDisplayRepresentation = "Style"
     static var caseDisplayRepresentations: [WidgetStyleOption: DisplayRepresentation] = [
         .sky: "Live sky",
+        .system: "Light or dark, like the phone",
         .skin: "Skin color (Murk Pro)",
         .midnight: "Midnight (Murk Pro)",
     ]
@@ -49,7 +50,7 @@ enum WidgetStyleOption: String, AppEnum {
 
 struct MurkWidgetIntent: WidgetConfigurationIntent {
     static var title: LocalizedStringResource = "Murk"
-    static var description = IntentDescription("Leave Place empty to follow the app. Choosing a city or another style needs Murk Pro.")
+    static var description = IntentDescription("Leave Place empty to follow the app. Live sky and Light or dark are free; a chosen city and the other styles need Murk Pro.")
 
     @Parameter(title: "Place")
     var place: PlaceEntity?
@@ -154,6 +155,7 @@ struct MurkWeatherWidget: Widget {
 struct WidgetView: View {
     @Environment(\.widgetFamily) private var family
     @Environment(\.widgetRenderingMode) private var mode
+    @Environment(\.colorScheme) private var scheme
     let entry: WeatherEntry
 
     private var isHome: Bool { [.systemSmall, .systemMedium, .systemLarge].contains(family) }
@@ -173,27 +175,29 @@ struct WidgetView: View {
         // On tinted/clear home screens iOS turns all text one color, so the sky goes deeper to keep it readable,
         // and it's drawn as a picture, which is the one thing iOS lets keep its color there.
         let accented = mode != .fullColor
+        // "Light or dark" follows the phone's appearance: a pale card in Light, near-black in Dark.
+        let skin: Skin = entry.look == .system ? (scheme == .dark ? .graphite : .fog) : entry.skin
         let live: Sky? = {
             switch entry.look {
             case .sky: return entry.forecast.flatMap { Sky.current($0, skin: entry.skin, at: entry.date) }
-            case .skin: return nil                                                  // the skin's own flat color
+            case .skin, .system: return nil                                         // a flat color
             case .midnight: return Sky.at(altitude: -40, cover: 0, precip: false)   // always a clear night
             }
         }()
         // Clear and Tinted home screens: iOS draws its own glass behind the widget, so Murk draws no sky
         // there and uses white text, like Apple's widgets. Full color keeps the live sky.
         let sky: Sky? = accented ? nil : live
-        let p: Palette = accented ? .onGlass : Palette(skin: entry.skin, sky: sky)
+        let p: Palette = accented ? .onGlass : Palette(skin: skin, sky: sky)
         Group {
             if let f = entry.forecast {
                 switch family {
-                case .systemSmall: SmallView(f: f, u: entry.unit, skin: entry.skin)
-                case .systemMedium: MediumView(f: f, u: entry.unit, skin: entry.skin)
-                case .systemLarge: LargeView(f: f, u: entry.unit, skin: entry.skin, date: entry.date)
+                case .systemSmall: SmallView(f: f, u: entry.unit, skin: skin)
+                case .systemMedium: MediumView(f: f, u: entry.unit, skin: skin)
+                case .systemLarge: LargeView(f: f, u: entry.unit, skin: skin, date: entry.date)
                 case .accessoryCircular: CircularView(f: f, u: entry.unit)
                 case .accessoryRectangular: RectangularView(f: f, u: entry.unit)
-                case .accessoryInline: Text("\(entry.unit.temp(f.current.temperature))° \(f.current.condition.title)")
-                default: SmallView(f: f, u: entry.unit, skin: entry.skin)
+                case .accessoryInline: Text("\(entry.unit.temp(f.current.temperature))°\(OtherUnit.suffix(f.current.temperature, entry.unit)) \(f.current.condition.title)")
+                default: SmallView(f: f, u: entry.unit, skin: skin)
                 }
             } else {
                 EmptyWidget(reason: entry.reason)
@@ -209,7 +213,7 @@ struct WidgetView: View {
         .containerBackground(for: .widget) {
             // Clear and Tinted home screens: no fill at all, so the system glass shows the wallpaper
             // like every other widget (a solid fill gets tinted into a flat slab there).
-            if accented { Color.clear } else if let sky { SkyBackground(sky: sky) } else { entry.skin.bg }
+            if accented { Color.clear } else if let sky { SkyBackground(sky: sky) } else { skin.bg }
         }
         .widgetURL(URL(string: "murk://now"))
     }
@@ -389,7 +393,17 @@ struct HeroStack: View {
     /// actually available, so the number is never hidden behind the clouds.
     var body: some View {
         GeometryReader { g in
-            let hiLo: CGFloat = showHiLo ? 16 : 0
+            let other: String? = OtherUnit.text(f.current.temperature, u)
+            let footer: String? = {
+                let hl: String? = showHiLo ? f.daily.first.map { "H \(u.temp($0.high))°  L \(u.temp($0.low))°" } : nil
+                switch (other, hl) {
+                case let (o?, h?): return "\(o)  ·  \(h)"
+                case let (o?, nil): return o
+                case let (nil, h?): return h
+                default: return nil
+                }
+            }()
+            let hiLo: CGFloat = footer == nil ? 0 : 16
             let h: CGFloat = max(40, g.size.height - hiLo)
             let skyH: CGFloat = h * 0.74
             let tempSize: CGFloat = h * 0.56
@@ -406,9 +420,10 @@ struct HeroStack: View {
                         .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
                 }
                 .frame(width: g.size.width, height: h)
-                if showHiLo, let d = f.daily.first {
-                    Text("H \(u.temp(d.high))°  L \(u.temp(d.low))°")
+                if let footer {
+                    Text(footer)
                         .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .lineLimit(1).minimumScaleFactor(0.7)
                         .foregroundStyle(pal?.muted ?? skin.muted)
                         .widgetAccentable()
                         .frame(height: hiLo)
@@ -540,7 +555,7 @@ struct RectangularView: View {
                 Text(f.place.name).fontWeight(.semibold).lineLimit(1)
             }
             .font(.caption)
-            Text("\(u.temp(f.current.temperature))° \(f.current.condition.title)").font(.headline).lineLimit(1)
+            Text("\(u.temp(f.current.temperature))°\(OtherUnit.suffix(f.current.temperature, u)) \(f.current.condition.title)").font(.headline).lineLimit(1)
             if let d = f.daily.first {
                 Text("H \(u.temp(d.high))° L \(u.temp(d.low))°\(d.precipChance >= 30 ? " · \(d.precipChance)% rain" : "")").font(.caption2)
             }
@@ -622,6 +637,20 @@ private extension Color {
         ui.getRed(&r, green: &g, blue: &b, alpha: &a)
         let k = CGFloat(amount)
         return Color(red: Double(r + (1 - r) * k), green: Double(g + (1 - g) * k), blue: Double(b + (1 - b) * k))
+    }
+}
+
+/// The temperature in the unit the user isn't using, when they asked to see both.
+enum OtherUnit {
+    static func text(_ celsius: Double, _ u: TempUnit, on: Bool = SharedStore.bothUnits) -> String? {
+        guard on else { return nil }
+        let o: TempUnit = u == .fahrenheit ? .celsius : .fahrenheit
+        return "\(o.temp(celsius))\(o.symbol)"
+    }
+
+    /// " / 19°C" for one-line places.
+    static func suffix(_ celsius: Double, _ u: TempUnit) -> String {
+        text(celsius, u).map { " / \($0)" } ?? ""
     }
 }
 

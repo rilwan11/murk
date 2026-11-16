@@ -209,7 +209,7 @@ struct SettingsSheet: View {
             } label: { Label("Units", systemImage: "thermometer.medium") }
             .pickerStyle(.segmented)
             Toggle(isOn: $state.bothUnits) {
-                Label("Also show \(state.unit == .fahrenheit ? "°C" : "°F") on Now", systemImage: "thermometer.variable")
+                Label("Also show \(state.unit == .fahrenheit ? "°C" : "°F") (app and widgets)", systemImage: "thermometer.variable")
             }
             Toggle(isOn: $state.minimal) { Label("Minimal mode", systemImage: "eye.slash") }
             Toggle(isOn: $state.tilt) { Label("Tilt scenes with the phone", systemImage: "gyroscope") }
