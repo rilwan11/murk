@@ -16,6 +16,8 @@ enum SceneSnapshotter {
         guard d.string(forKey: key) != stamp else { return }
         // No App Group (or under test): nowhere to write, nothing to do.
         guard WidgetArt.url(.clear, day: true, skin: skin) != nil, NSClassFromString("XCTestCase") == nil else { return }
+        // The GPU is off-limits in the background: a render there comes out black. Try again when Murk is open.
+        guard Thread.isMainThread, UIApplication.shared.applicationState == .active else { return }
 
         lock.lock()
         let started = busy.insert(key).inserted
@@ -38,6 +40,7 @@ enum SceneSnapshotter {
                     guard let url = WidgetArt.url(item.0, day: item.1, skin: skin),
                           let img = scene.snapshot(cover: item.0.cover, isDay: item.1, moonAge: age, skin: skin,
                                                    size: CGSize(width: 520, height: 520)),
+                          WidgetArt.looksValid(img),
                           let png = img.pngData() else { return }
                     if (try? png.write(to: url, options: .atomic)) != nil { wrote += 1 }
                 }

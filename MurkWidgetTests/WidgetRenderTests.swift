@@ -68,6 +68,18 @@ final class WidgetRenderTests: XCTestCase {
         XCTAssertGreaterThan(coverage, 0.02)
     }
 
+    func testSolidSkyPicturesAreRejected() {
+        let fmt = UIGraphicsImageRendererFormat(); fmt.scale = 1; fmt.opaque = false
+        let black = UIGraphicsImageRenderer(size: CGSize(width: 40, height: 40), format: fmt).image { c in
+            UIColor.black.setFill(); c.fill(CGRect(x: 0, y: 0, width: 40, height: 40))
+        }
+        XCTAssertFalse(WidgetArt.looksValid(black))
+        let keyed = UIGraphicsImageRenderer(size: CGSize(width: 40, height: 40), format: fmt).image { c in
+            UIColor.white.setFill(); c.cgContext.fillEllipse(in: CGRect(x: 10, y: 10, width: 20, height: 20))
+        }
+        XCTAssertTrue(WidgetArt.looksValid(keyed))
+    }
+
     func testCountdownPlan() {
         let now = Date()
         var f = forecast(rainFromHour: nil)

@@ -26,8 +26,8 @@ enum ArtKind: String, CaseIterable {
 }
 
 enum WidgetArt {
-    /// v4: the moon shows its real phase, and daytime clouds are sunlit white.
-    static let version = 4
+    /// v5: re-rendered after v4 pictures drawn while Murk was in the background came out solid black.
+    static let version = 5
 
     static func url(_ kind: ArtKind, day: Bool, skin: Skin, version v: Int = version) -> URL? {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: SharedStore.appGroup)?
@@ -36,7 +36,24 @@ enum WidgetArt {
 
     /// `legacy` reads the previous version's images until the app has rendered new ones.
     static func image(_ kind: ArtKind, day: Bool, skin: Skin, legacy: Bool = false) -> UIImage? {
-        guard let u = url(kind, day: day, skin: skin, version: legacy ? version - 1 : version) else { return nil }
-        return UIImage(contentsOfFile: u.path)
+        guard let u = url(kind, day: day, skin: skin, version: legacy ? version - 1 : version),
+              let img = UIImage(contentsOfFile: u.path), looksValid(img) else { return nil }
+        return img
+    }
+
+    /// The pictures have a see-through sky. One whose corner is solid was drawn without the GPU
+    /// (iOS gives an app in the background a black frame) and must not be shown or kept.
+    static func looksValid(_ img: UIImage) -> Bool {
+        guard let cg = img.cgImage, cg.width > 1, cg.height > 1 else { return false }
+        var px = [UInt8](repeating: 0, count: 4)
+        let ok: Bool = px.withUnsafeMutableBytes { buf in
+            guard let ctx = CGContext(data: buf.baseAddress, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return false }
+            // Puts the picture's top-left pixel on the single pixel of the context.
+            ctx.draw(cg, in: CGRect(x: 0, y: CGFloat(1 - cg.height), width: CGFloat(cg.width), height: CGFloat(cg.height)))
+            return true
+        }
+        return ok && px[3] < 20
     }
 }
