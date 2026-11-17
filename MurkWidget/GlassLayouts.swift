@@ -219,8 +219,7 @@ struct ForecastIcon: View {
             drawn
         } else if let img = rendered() {
             // Clear and Tinted home screens recolor shapes; a picture keeps the gold and cyan.
-            Image(uiImage: img).resizable().scaledToFit().frame(width: size * 1.35, height: size * 1.25)
-                .modifier(KeepColor())
+            fullColorImage(img).scaledToFit().frame(width: size * 1.35, height: size * 1.25)
         } else {
             drawn
         }
@@ -292,12 +291,6 @@ struct ForecastIcon: View {
             .symbolRenderingMode(.palette)
             .foregroundStyle(MurkGlass.rainCloud, MurkGlass.gold)
             .frame(width: size * 1.3)
-    }
-}
-
-private struct KeepColor: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(iOS 18.0, *) { content.widgetAccentedRenderingMode(.fullColor) } else { content }
     }
 }
 
