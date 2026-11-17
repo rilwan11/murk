@@ -3,6 +3,7 @@
 ## Unreleased
 
 ### New
+- **Widgets follow Clear and Tinted home screens fully:** the clouds, sun, moon and digits lose their color and take the home screen's tint, like Apple's widgets.
 - **Reset on every page:** the round arrow in the corner of each 3D scene puts the view back and the slider back to now.
 - **Tilt:** tilting the phone tilts the 3D scenes a little. Settings › Tilt scenes with the phone. Off with Reduce Motion.
 - **Both units:** Settings › Also show °C (or °F) adds the other unit as a small chip on the Now page; tap it to switch.

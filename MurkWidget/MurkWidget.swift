@@ -354,11 +354,12 @@ struct Sky3D: View {
     }
 }
 
-/// A picture that keeps its own colors on tinted and clear home screens.
+/// A picture that, on Clear and Tinted home screens, loses its color and takes on the home screen's
+/// tint like every other widget, keeping its light and shade so it still reads as 3D.
 @ViewBuilder
 func fullColorImage(_ ui: UIImage) -> some View {
     if #available(iOS 18.0, *) {
-        Image(uiImage: ui).resizable().widgetAccentedRenderingMode(.fullColor)
+        Image(uiImage: ui).resizable().widgetAccentedRenderingMode(.accentedDesaturated)
     } else {
         Image(uiImage: ui).resizable()
     }
@@ -368,7 +369,7 @@ func fullColorImage(_ ui: UIImage) -> some View {
 private func skyImage(_ ui: UIImage) -> some View {
     // Fill the width (the clouds sit in the middle band of the square render) so they read larger.
     if #available(iOS 18.0, *) {
-        Image(uiImage: ui).resizable().widgetAccentedRenderingMode(.fullColor).scaledToFill()
+        Image(uiImage: ui).resizable().widgetAccentedRenderingMode(.accentedDesaturated).scaledToFill()
     } else {
         Image(uiImage: ui).resizable().scaledToFill()
     }
