@@ -213,7 +213,8 @@ final class RolledForecastTests: XCTestCase {
         guard let hour = f.hourly.last(where: { $0.time <= later }) else { return XCTFail("no hourly data") }
         let r = f.rolled(to: later)
         XCTAssertEqual(r.current.temperature, hour.temperature)
-        XCTAssertEqual(r.current.isDay, hour.isDay)
+        let sunUp = Astronomy.sunAltitude(latitude: f.place.latitude, longitude: f.place.longitude, at: later) > -2
+        XCTAssertEqual(r.current.isDay, hour.isDay || sunUp)
         XCTAssertEqual(r.current.code, hour.code)
         XCTAssertEqual(r.fetchedAt, f.fetchedAt, "age stays honest")
     }
@@ -221,6 +222,14 @@ final class RolledForecastTests: XCTestCase {
     func testFreshForecastIsUntouched() {
         let f = Fixture.forecast()
         XCTAssertEqual(f.rolled(to: Date().addingTimeInterval(600)).current.temperature, f.current.temperature)
+    }
+
+    func testDayOrNightFollowsTheSunLikeTheApp() {
+        var f = Fixture.forecast()
+        f.current.isDay = false
+        let now = Date()
+        let sunUp = Astronomy.sunAltitude(latitude: f.place.latitude, longitude: f.place.longitude, at: now) > -2
+        XCTAssertEqual(f.rolled(to: now).current.isDay, sunUp)
     }
 
     func testPastDaysAreDropped() {

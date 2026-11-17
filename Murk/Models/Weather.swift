@@ -242,8 +242,10 @@ extension Forecast {
     /// over are dropped. Lets a widget showing an older forecast still say night at night.
     /// `fetchedAt` is kept, so the age shown stays honest.
     func rolled(to date: Date) -> Forecast {
-        guard date.timeIntervalSince(fetchedAt) > 30 * 60 else { return self }
         var f = self
+        // Day or night by the sun itself, the same rule the app's scene uses, so the widget shows the
+        // sun once it's up even if the forecast's hour still says night (and vice versa).
+        guard date.timeIntervalSince(fetchedAt) > 30 * 60 else { return f.lit(at: date) }
         if let h = hourly.last(where: { $0.time <= date }), date.timeIntervalSince(h.time) < 3600 {
             f.current.temperature = h.temperature
             f.current.apparent = h.apparent
@@ -260,6 +262,14 @@ extension Forecast {
         let today = cal.startOfDay(for: date)
         let ahead = daily.filter { cal.startOfDay(for: $0.date) >= today }
         if !ahead.isEmpty { f.daily = ahead }
+        return f.lit(at: date)
+    }
+
+    /// `current.isDay` from the forecast, or true once the sun is near the horizon (as the app's scene decides it).
+    func lit(at date: Date) -> Forecast {
+        var f = self
+        let alt = Astronomy.sunAltitude(latitude: place.latitude, longitude: place.longitude, at: date)
+        f.current.isDay = current.isDay || alt > -2
         return f
     }
 }
