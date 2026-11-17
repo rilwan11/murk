@@ -61,6 +61,7 @@
 		56DBFA54F658278D9D841F40 /* MoonSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DF56981D23F3B415B365996 /* MoonSurface.swift */; };
 		579A6E8CD0E58E41A8364BE5 /* SoundControl.c in Sources */ = {isa = PBXBuildFile; fileRef = 611FE503167DE0877AB56ACD /* SoundControl.c */; };
 		5ABA33DC5D99B752EF89847D /* StateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FF712753AEB1ACCB0AD4B7D /* StateTests.swift */; };
+		5BC5039E73A3A3C7BDB99E21 /* GlassLayouts.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECFCE2EC66BBB654C2793706 /* GlassLayouts.swift */; };
 		5DEAF54A58327D8B8551C800 /* AirPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89CBBF09C1D3FA9A9F0B6421 /* AirPage.swift */; };
 		61811B802A5302222A16A3A5 /* AlertLedger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FF0779F1363A8339F872760 /* AlertLedger.swift */; };
 		65CD379794AE6957668B0CC4 /* RainActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = F66C3E0EF0F1304FFE2F0813 /* RainActivityWidget.swift */; };
@@ -103,6 +104,7 @@
 		BB154EB7E30EBBC6A9DEF98F /* Weather.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DB95DEE244E1777F4C71E4E /* Weather.swift */; };
 		BBD98630ACB100E30257F5DA /* MoonSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7DF56981D23F3B415B365996 /* MoonSurface.swift */; };
 		BC5F3636D011C10399D62D4B /* WeatherRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 603299C50B1ECBE326A9201B /* WeatherRepository.swift */; };
+		C3F33714501C5A828A934EB5 /* GlassLayouts.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECFCE2EC66BBB654C2793706 /* GlassLayouts.swift */; };
 		C48A6DD227F057B887D8A9EA /* ProFeatureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76032E3551DE0E845B988439 /* ProFeatureTests.swift */; };
 		C48C2550815E561F7D71E62D /* MurkWatchWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 875094EB8BF53FD2E92033E7 /* MurkWatchWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		C739DB345656A76D9F14CF29 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 04B729FBBF03C4237FAF4F5C /* PrivacyInfo.xcprivacy */; };
@@ -267,6 +269,7 @@
 		EADC7CC14BDEBA6496DDBAEB /* MurkWidgetTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MurkWidgetTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		EC1FC7657CCE3E7F8DDE6627 /* NotificationRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationRules.swift; sourceTree = "<group>"; };
 		EC4A343F50D536DBF8D010FB /* WidgetArt.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetArt.swift; sourceTree = "<group>"; };
+		ECFCE2EC66BBB654C2793706 /* GlassLayouts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassLayouts.swift; sourceTree = "<group>"; };
 		EF0ECAE5C6D2EB8C223FC878 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		EFC6315B8B0E64D94ED4DFE3 /* Murk.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Murk.entitlements; sourceTree = "<group>"; };
 		F64494320C87BA029FE78481 /* SettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsSheet.swift; sourceTree = "<group>"; };
@@ -409,6 +412,7 @@
 		8DE7B8A97C3D7B76CB609AF0 /* MurkWidget */ = {
 			isa = PBXGroup;
 			children = (
+				ECFCE2EC66BBB654C2793706 /* GlassLayouts.swift */,
 				37776B5F8B8D85C29B293A50 /* Info.plist */,
 				6F705F7AF48EBF6589A0344E /* MurkWidget.entitlements */,
 				929DCA59A79F665756AA13F5 /* MurkWidget.swift */,
@@ -758,6 +762,7 @@
 				26FAE2ACE51F182AA375BCA6 /* Astronomy.swift in Sources */,
 				77F6DF3E41C7F355FAA14A11 /* DebugStubs.swift in Sources */,
 				53C10D3179C2E7557B3991F5 /* ForecastCache.swift in Sources */,
+				C3F33714501C5A828A934EB5 /* GlassLayouts.swift in Sources */,
 				02E950EF55D8E2BC8C36EBA8 /* MoonImage.swift in Sources */,
 				BBD98630ACB100E30257F5DA /* MoonSurface.swift in Sources */,
 				16DD71F23813037BFAB1E5C1 /* MurkWidget.swift in Sources */,
@@ -806,6 +811,7 @@
 				1B9B56891EDBE5E5DEC47474 /* Astronomy.swift in Sources */,
 				F4CF5AADB30C140695603266 /* DebugStubs.swift in Sources */,
 				FEBC8E32623D34FD5E347CB4 /* ForecastCache.swift in Sources */,
+				5BC5039E73A3A3C7BDB99E21 /* GlassLayouts.swift in Sources */,
 				75312360A5741A047B3D7DCD /* MoonImage.swift in Sources */,
 				56DBFA54F658278D9D841F40 /* MoonSurface.swift in Sources */,
 				9CDB008638D53C6494D229FF /* MurkWidget.swift in Sources */,
