@@ -24,7 +24,7 @@ struct FollowingProvider: TimelineProvider {
     }
 }
 
-/// The frame every page widget shares: live sky on full color, system glass on Clear and Tinted, a link to its page.
+/// The frame every page widget shares: Murk glass on full color, system glass on Clear and Tinted, a link to its page.
 struct PageWidgetFrame<Content: View>: View {
     @Environment(\.widgetRenderingMode) private var mode
     @Environment(\.widgetFamily) private var family
@@ -34,9 +34,9 @@ struct PageWidgetFrame<Content: View>: View {
 
     var body: some View {
         let accented = mode != .fullColor
-        let live = entry.forecast.flatMap { Sky.current($0, skin: entry.skin, at: entry.date) }
-        let sky: Sky? = accented ? nil : live
-        let p: Palette = accented ? .onGlass : Palette(skin: entry.skin, sky: sky)
+        // The same smoked navy glass as the main widget, so they sit together on a home screen.
+        let sky: Sky? = nil
+        let p: Palette = .onGlass
         let isHome = [.systemSmall, .systemMedium, .systemLarge].contains(family)
         Group {
             if let f = entry.forecast { content(f) } else { EmptyWidget(reason: entry.reason) }
@@ -50,7 +50,7 @@ struct PageWidgetFrame<Content: View>: View {
         .containerBackground(for: .widget) {
             // Clear and Tinted home screens: no fill at all, so the system glass shows the wallpaper
             // like every other widget (a solid fill gets tinted into a flat slab there).
-            if accented { Color.clear } else if let sky { SkyBackground(sky: sky) } else { entry.skin.bg }
+            if accented { Color.clear } else { GlassSurface() }
         }
         .widgetURL(URL(string: link))
     }

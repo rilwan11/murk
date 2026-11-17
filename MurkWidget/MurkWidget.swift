@@ -40,7 +40,7 @@ enum WidgetStyleOption: String, AppEnum {
     case sky, system, skin, midnight
     static var typeDisplayRepresentation: TypeDisplayRepresentation = "Style"
     static var caseDisplayRepresentations: [WidgetStyleOption: DisplayRepresentation] = [
-        .sky: "Live sky",
+        .sky: "Murk glass",
         .system: "Light or dark, like the phone",
         .skin: "Skin color (Murk Pro)",
         .midnight: "Midnight (Murk Pro)",
@@ -50,7 +50,7 @@ enum WidgetStyleOption: String, AppEnum {
 
 struct MurkWidgetIntent: WidgetConfigurationIntent {
     static var title: LocalizedStringResource = "Murk"
-    static var description = IntentDescription("Leave Place empty to follow the app. Live sky and Light or dark are free; a chosen city and the other styles need Murk Pro.")
+    static var description = IntentDescription("Leave Place empty to follow the app. Murk glass and Light or dark are free; a chosen city and the other styles need Murk Pro.")
 
     @Parameter(title: "Place")
     var place: PlaceEntity?
@@ -163,6 +163,7 @@ struct WidgetView: View {
     /// The whole widget in one sentence for VoiceOver.
     private var spoken: String {
         guard let f = entry.forecast else { return String(localized: "Murk. Open the app to load the forecast.") }
+        if [.systemSmall, .systemMedium, .systemLarge].contains(family) { return GlassSpeech.line(f, entry.unit) }
         let u = entry.unit
         var s = String(localized: "\(f.place.name), \(u.temp(f.current.temperature)) degrees, \(f.current.condition.title)")
         if let d = f.daily.first { s += String(localized: ". High \(u.temp(d.high)), low \(u.temp(d.low)), \(d.precipChance) percent chance of rain") }
@@ -171,33 +172,23 @@ struct WidgetView: View {
     }
 
     var body: some View {
-        // The same live sky as the app (dawn, blue day, golden hour, dusk, navy night, grey under cloud).
-        // On tinted/clear home screens iOS turns all text one color, so the sky goes deeper to keep it readable,
-        // and it's drawn as a picture, which is the one thing iOS lets keep its color there.
+        // Murk glass: smoked navy on full color, the system's glass on Clear and Tinted; the art keeps its color.
         let accented = mode != .fullColor
         // "Light or dark" follows the phone's appearance: a pale card in Light, near-black in Dark.
         let skin: Skin = entry.look == .system ? (scheme == .dark ? .graphite : .fog) : entry.skin
-        let live: Sky? = {
-            switch entry.look {
-            case .sky: return entry.forecast.flatMap { Sky.current($0, skin: entry.skin, at: entry.date) }
-            case .skin, .system: return nil                                         // a flat color
-            case .midnight: return Sky.at(altitude: -40, cover: 0, precip: false)   // always a clear night
-            }
-        }()
-        // Clear and Tinted home screens: iOS draws its own glass behind the widget, so Murk draws no sky
-        // there and uses white text, like Apple's widgets. Full color keeps the live sky.
-        let sky: Sky? = accented ? nil : live
-        let p: Palette = accented ? .onGlass : Palette(skin: skin, sky: sky)
+        let glassLook = accented || entry.look == .sky || entry.look == .midnight || (entry.look == .system && scheme == .dark)
+        let ink: GlassInk = glassLook ? .glass : GlassInk(ink: skin.ink, muted: skin.muted)
+        let p: Palette = glassLook ? .onGlass : Palette(skin: skin, sky: nil)
         Group {
             if let f = entry.forecast {
                 switch family {
-                case .systemSmall: SmallView(f: f, u: entry.unit, skin: skin)
-                case .systemMedium: MediumView(f: f, u: entry.unit, skin: skin)
-                case .systemLarge: LargeView(f: f, u: entry.unit, skin: skin, date: entry.date)
+                case .systemSmall: GlassSmall(f: f, u: entry.unit, skin: entry.skin)
+                case .systemMedium: GlassMedium(f: f, u: entry.unit, skin: entry.skin)
+                case .systemLarge: GlassLarge(f: f, u: entry.unit, skin: entry.skin)
                 case .accessoryCircular: CircularView(f: f, u: entry.unit)
                 case .accessoryRectangular: RectangularView(f: f, u: entry.unit)
                 case .accessoryInline: Text("\(entry.unit.temp(f.current.temperature))°\(OtherUnit.suffix(f.current.temperature, entry.unit)) \(f.current.condition.title)")
-                default: SmallView(f: f, u: entry.unit, skin: skin)
+                default: GlassSmall(f: f, u: entry.unit, skin: entry.skin)
                 }
             } else {
                 EmptyWidget(reason: entry.reason)
@@ -209,11 +200,18 @@ struct WidgetView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(spoken))
         .environment(\.widgetPalette, p)
-        .environment(\.widgetSky, sky)
+        .environment(\.glassInk, ink)
         .containerBackground(for: .widget) {
-            // Clear and Tinted home screens: no fill at all, so the system glass shows the wallpaper
-            // like every other widget (a solid fill gets tinted into a flat slab there).
-            if accented { Color.clear } else if let sky { SkyBackground(sky: sky) } else { skin.bg }
+            // Clear and Tinted home screens: the system's own glass. Otherwise Murk's smoked navy glass,
+            // or the chosen style.
+            if accented { Color.clear } else {
+                switch entry.look {
+                case .sky: GlassSurface()
+                case .midnight: SkyBackground(sky: Sky.at(altitude: -40, cover: 0, precip: false))
+                case .skin: skin.bg
+                case .system: if scheme == .dark { GlassSurface() } else { skin.bg }
+                }
+            }
         }
         .widgetURL(URL(string: "murk://now"))
     }
@@ -354,12 +352,11 @@ struct Sky3D: View {
     }
 }
 
-/// A picture that, on Clear and Tinted home screens, loses its color and takes on the home screen's
-/// tint like every other widget, keeping its light and shade so it still reads as 3D.
+/// A picture that keeps its own colors on Clear and Tinted home screens (the gold sun, the pearl clouds).
 @ViewBuilder
 func fullColorImage(_ ui: UIImage) -> some View {
     if #available(iOS 18.0, *) {
-        Image(uiImage: ui).resizable().widgetAccentedRenderingMode(.accentedDesaturated)
+        Image(uiImage: ui).resizable().widgetAccentedRenderingMode(.fullColor)
     } else {
         Image(uiImage: ui).resizable()
     }
@@ -369,7 +366,7 @@ func fullColorImage(_ ui: UIImage) -> some View {
 private func skyImage(_ ui: UIImage) -> some View {
     // Fill the width (the clouds sit in the middle band of the square render) so they read larger.
     if #available(iOS 18.0, *) {
-        Image(uiImage: ui).resizable().widgetAccentedRenderingMode(.accentedDesaturated).scaledToFill()
+        Image(uiImage: ui).resizable().widgetAccentedRenderingMode(.fullColor).scaledToFill()
     } else {
         Image(uiImage: ui).resizable().scaledToFill()
     }

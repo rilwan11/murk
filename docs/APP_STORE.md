@@ -154,4 +154,4 @@ What syncs: saved cities, units, skin, minimal mode, heads-up pill, sounds, noti
 
 ## 8. Widgets for a chosen city and widget styles
 
-Long-press a Murk widget › Edit Widget. "Place" lists the saved cities and "Style" offers Live sky, Skin color and Midnight. City and non-default styles apply only with Murk Pro; without it the widget follows the app in the live sky. Existing widgets keep working and follow the app.
+Long-press a Murk widget › Edit Widget. "Place" lists the saved cities and "Style" offers Murk glass (default), Light or dark, Skin color and Midnight. City and non-default styles apply only with Murk Pro; without it the widget follows the app in Murk glass or Light or dark. Existing widgets keep working and follow the app.
