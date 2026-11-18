@@ -276,6 +276,8 @@ final class AppState: ObservableObject {
 
     /// App came to the foreground. Does nothing if a load is running or the forecast is still fresh.
     func refreshIfStale() {
+        // Coming back hours later: show the old forecast as the hour it is now while the new one loads.
+        if let f = forecast, f.age() > 30 * 60 { forecast = f.rolled(to: Date()) }
         if loadInFlight { return }
         if let f = forecast, let p = activePlace, Self.same(f.place, p), !f.isCached, f.age() < 600, selectedID != nil { return }
         begin(force: false, locate: true)
@@ -313,7 +315,8 @@ final class AppState: ObservableObject {
         if !force, let f = forecast, Self.same(f.place, place), !f.isCached, f.age() < 600 { return }
         if forecast.map({ !Self.same($0.place, place) }) ?? true {
             // Last known weather for this place right away; never the previous city's.
-            forecast = repository.cached(for: place) ?? nearbyCached(place)
+            // A saved forecast reads as the hour it is now (an old "Sunny" mustn't show at night).
+            forecast = (repository.cached(for: place) ?? nearbyCached(place))?.rolled(to: Date())
             failure = nil
             resolveAutoSkin()
         }
@@ -342,6 +345,7 @@ final class AppState: ObservableObject {
             guard isCurrent(gen) else { return }
             let e = (error as? WeatherError) ?? .badData
             failure = e
+            if let f = forecast, f.age() > 30 * 60 { forecast = f.rolled(to: Date()) }
             scheduleRetry(after: e, gen: gen)
         }
     }

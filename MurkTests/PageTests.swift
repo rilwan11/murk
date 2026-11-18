@@ -242,3 +242,17 @@ final class RolledForecastTests: XCTestCase {
         XCTAssertEqual(r.daily.first.map { cal.startOfDay(for: $0.date) }, today)
     }
 }
+
+final class StaleScreenTests: XCTestCase {
+    @MainActor func testAnOldSavedForecastNeverSaysSunnyAtNight() {
+        var f = Fixture.forecast(now: Date().addingTimeInterval(-11 * 3600))
+        f.current.isDay = true; f.current.code = 0
+        let r = f.rolled(to: Date())
+        let sunUp = Astronomy.sunAltitude(latitude: f.place.latitude, longitude: f.place.longitude) > -2
+        if !sunUp, let h = f.hourly.last(where: { $0.time <= Date() }), !h.isDay {
+            XCTAssertFalse(r.current.isDay)
+            XCTAssertNotEqual(r.current.condition.title, "Sunny")
+        }
+        XCTAssertEqual(r.fetchedAt, f.fetchedAt)
+    }
+}
