@@ -62,6 +62,17 @@ final class WidgetRenderTests: XCTestCase {
         assertDrawn(WidgetView(entry: e).environment(\.colorScheme, .dark), "Dark widget")
     }
 
+    func testTimelineCoversTheNextTwelveHoursHourByHour() {
+        let e = entry(forecast())
+        let list = e.ahead()
+        XCTAssertEqual(list.first?.date, e.date)
+        XCTAssertGreaterThanOrEqual(list.last!.date.timeIntervalSince(e.date), 12 * 3600 - 1)
+        XCTAssertEqual(list.map(\.date), list.map(\.date).sorted())
+        let later = list.last!
+        let hour = e.forecast!.hourly.last { $0.time <= later.date }
+        XCTAssertEqual(later.forecast?.current.temperature, hour?.temperature)
+    }
+
     func testOtherUnitText() {
         XCTAssertEqual(OtherUnit.text(20, .fahrenheit, on: true), "20°C")
         XCTAssertEqual(OtherUnit.text(20, .celsius, on: true), "68°F")

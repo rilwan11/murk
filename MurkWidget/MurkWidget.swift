@@ -14,6 +14,18 @@ struct WeatherEntry: TimelineEntry {
     var reason: String? = nil
 }
 
+extension WeatherEntry {
+    /// The next 12 hours of this entry, each showing its own hour from the forecast, so the widget
+    /// stays right (temperature, sky, day or night) even when iOS is slow to ask for a new timeline.
+    func ahead() -> [WeatherEntry] {
+        let minutes: [Double] = [0, 15, 30, 45, 60, 90, 120] + (3...12).map { Double($0) * 60 }
+        return minutes.map { m in
+            let at = date.addingTimeInterval(m * 60)
+            return WeatherEntry(date: at, forecast: forecast?.rolled(to: at), unit: unit, skin: skin, look: look, reason: reason)
+        }
+    }
+}
+
 // MARK: - Editing a widget (place and style are part of Murk Pro)
 
 struct PlaceEntity: AppEntity {
@@ -71,14 +83,8 @@ struct Provider: AppIntentTimelineProvider {
 
     func timeline(for configuration: MurkWidgetIntent, in context: Context) async -> Timeline<WeatherEntry> {
         let first = await load(configuration)
-        // Same forecast, but the sky behind it keeps moving through the next hour.
-        let entries = (0..<4).map { i -> WeatherEntry in
-            let at = first.date.addingTimeInterval(Double(i) * 15 * 60)
-            return WeatherEntry(date: at, forecast: first.forecast?.rolled(to: at),
-                                unit: first.unit, skin: first.skin, look: first.look, reason: first.reason)
-        }
         // Refresh every 30 minutes (iOS may stretch this to save battery).
-        return Timeline(entries: entries, policy: .after(Date().addingTimeInterval(30 * 60)))
+        return Timeline(entries: first.ahead(), policy: .after(Date().addingTimeInterval(30 * 60)))
     }
 
     /// Draws from the snapshot the app shares. The network is used only when there's no usable
