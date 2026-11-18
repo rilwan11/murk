@@ -96,7 +96,10 @@ enum WidgetLoader {
         // A widget pinned to a city keeps its own snapshot; otherwise it follows the app.
         let url = choice.place.flatMap { WidgetSnapshot.url(placeID: $0.id) } ?? WidgetSnapshot.defaultURL
         let place = choice.place?.place ?? SharedStore.place
-        let saved = WidgetSnapshot.load(from: url)
+        // A snapshot of another place (the app has since switched cities) is never shown.
+        let saved = WidgetSnapshot.load(from: url).flatMap { s in
+            abs(s.latitude - place.latitude) < 0.15 && abs(s.longitude - place.longitude) < 0.15 ? s : nil
+        }
         // The app keeps its own city fresh; a pinned city is refreshed here about once an hour.
         // Either way, after an hour the widget fetches for itself rather than show an old forecast.
         let freshFor: TimeInterval = 3600

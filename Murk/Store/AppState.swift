@@ -319,6 +319,8 @@ final class AppState: ObservableObject {
             forecast = (repository.cached(for: place) ?? nearbyCached(place))?.rolled(to: Date())
             failure = nil
             resolveAutoSkin()
+            // Widgets switch place with the app right away, not only after a successful refresh.
+            syncWidget()
         }
         isLoading = true
         do {
