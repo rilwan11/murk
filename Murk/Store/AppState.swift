@@ -313,7 +313,7 @@ final class AppState: ObservableObject {
         if !force, let f = forecast, Self.same(f.place, place), !f.isCached, f.age() < 600 { return }
         if forecast.map({ !Self.same($0.place, place) }) ?? true {
             // Last known weather for this place right away; never the previous city's.
-            forecast = repository.cached(for: place)
+            forecast = repository.cached(for: place) ?? nearbyCached(place)
             failure = nil
             resolveAutoSkin()
         }
@@ -324,6 +324,7 @@ final class AppState: ObservableObject {
             if let old = forecast, Self.same(old.place, place) { fresh.aqi = old.aqi; fresh.air = old.air; fresh.alerts = old.alerts }
             forecast = fresh
             failure = nil
+            retries = 0
             isLoading = false
             resolveAutoSkin()
             syncWidget()
@@ -339,7 +340,36 @@ final class AppState: ObservableObject {
         } catch is CancellationError {
         } catch {
             guard isCurrent(gen) else { return }
-            failure = (error as? WeatherError) ?? .badData
+            let e = (error as? WeatherError) ?? .badData
+            failure = e
+            scheduleRetry(after: e, gen: gen)
+        }
+    }
+
+    /// A saved forecast for another of the user's places within about 10 km (current location vs. the same
+    /// city saved), so a slow network never leaves the screen empty.
+    private func nearbyCached(_ place: Place) -> Forecast? {
+        let near = ([currentPlace].compactMap { $0 } + places).filter {
+            $0.id != place.id && abs($0.latitude - place.latitude) < 0.1 && abs($0.longitude - place.longitude) < 0.1
+        }
+        for other in near {
+            if var f = repository.cached(for: other) { f.place = place; return f }
+        }
+        return nil
+    }
+
+    private var retries = 0
+
+    /// A timeout or a dropped connection is tried again on its own: after 10 s, 30 s, then 90 s.
+    private func scheduleRetry(after e: WeatherError, gen: Int) {
+        guard e == .timedOut || e == .offline, retries < 3 else { return }
+        let delay = [10.0, 30.0, 90.0][retries]
+        retries += 1
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard let self, self.generation == gen, self.failure != nil,
+                  UIApplication.shared.applicationState == .active else { return }
+            self.begin(force: true, locate: false)
         }
     }
 

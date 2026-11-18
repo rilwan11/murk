@@ -11,13 +11,15 @@ struct RadarCard: View {
     @State private var failed = false
     @State private var index = 0
     @State private var full = false
+    /// Nothing loads until the Rain page is first shown, so radar tiles never compete with the forecast.
+    @State private var started = false
 
     var body: some View {
         let p = Palette(skin: state.skin, sky: sky)
         VStack(alignment: .leading, spacing: 8) {
             CardTitle(text: String(localized: "Radar"), trailing: frameLabel)
             ZStack {
-                if let catalog, !catalog.frames.isEmpty {
+                if started, let catalog, !catalog.frames.isEmpty {
                     RadarMap(place: place, catalog: catalog, index: index, interactive: false)
                         .allowsHitTesting(false)
                 } else {
@@ -37,7 +39,8 @@ struct RadarCard: View {
             .accessibilityAddTraits(.isButton)
             RadarCredit(palette: p).padding(.horizontal, 16)
         }
-        .task(id: place.id) { await load() }
+        .onChange(of: active, initial: true) { _, on in if on { started = true } }
+        .task(id: "\(place.id)-\(started)") { if started { await load() } }
         .task(id: "\(active)-\(catalog?.frames.count ?? 0)") { await loop() }
         .fullScreenCover(isPresented: $full) {
             if let catalog { RadarFullScreen(place: place, catalog: catalog) }
